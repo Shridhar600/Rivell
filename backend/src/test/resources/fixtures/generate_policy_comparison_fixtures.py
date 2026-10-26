@@ -80,7 +80,22 @@ contract_body = (
     + '<w:sectPr/>'
 )
 
+# A clause whose main subject is termination but which also speaks to liability: the
+# liability position matches only a topic the clause touches, so its wording is never offered.
+related_topic_contract_body = (
+    p('Master Services Agreement', 'Title')
+    + p('This Master Services Agreement is entered into as of January 1, 2026 by and '
+        'between Northwind Customer Group LLC ("Customer") and Pallas Cloud Services '
+        'GmbH ("Supplier").')
+    + p('1. Termination', 'Heading1')
+    + p('Either Party may terminate this Agreement for convenience upon thirty (30) '
+        "days' prior written notice to the other Party. The liability of Supplier under "
+        'this Agreement for breach of this Section is uncapped and unlimited.')
+    + '<w:sectPr/>'
+)
+
 write_docx('pc-playbook.docx', playbook_body)
 write_docx('pc-clause-library.docx', library_body)
 write_docx('pc-contract.docx', contract_body)
+write_docx('pc-related-topic-contract.docx', related_topic_contract_body)
 print('policy comparison fixtures written')

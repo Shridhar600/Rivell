@@ -110,6 +110,7 @@ export function reviewLifecycle(review: ReviewListItem): Lifecycle {
     return lifecycleOf('analysis_complete')
   }
   if (humanReview.blockers.includes('ANALYSIS_DEGRADED')) return lifecycleOf('degraded')
+  if (humanReview.blockers.includes('ANALYSIS_PARTIAL')) return lifecycleOf('degraded')
   if (humanReview.blockers.includes('ACTIVE_ESCALATION')) return lifecycleOf('blocked')
   if (humanReview.readyToFinalize) return lifecycleOf('ready')
   if (humanReview.status === 'NOT_STARTED') return lifecycleOf('completed')

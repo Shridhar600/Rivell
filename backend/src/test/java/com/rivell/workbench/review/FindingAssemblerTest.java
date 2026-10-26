@@ -28,7 +28,7 @@ class FindingAssemblerTest {
     private static ReviewAnalysisRun run() {
         return new ReviewAnalysisRun(UUID.randomUUID(), ORGANIZATION_ID, REVIEW_ID, 1,
                 RunStatus.COMPLETED, RunTrigger.INITIAL, "rivell-review-pipeline-1",
-                NOW, NOW, null, 0, null);
+                NOW, NOW, null, 0, null, null);
     }
 
     private static RawReviewSignal signal(
@@ -98,6 +98,34 @@ class FindingAssemblerTest {
                 List.of(UUID.randomUUID()), null);
 
         assertThat(assembler.assemble(run(), List.of(support), NOW)).isEmpty();
+    }
+
+    @Test
+    void aWalkAwayAbsenceNamesTheClauseThatMatchesItInsteadOfClaimingNothingWasFound() {
+        var candidateId = UUID.randomUUID();
+        var omission = new OmissionPayload(candidateId, "Termination for convenience", 12,
+                "No termination for convenience", "Term and termination");
+        var signal = new RawReviewSignal(UUID.randomUUID(), ORGANIZATION_ID, REVIEW_ID, RUN_ID,
+                UUID.randomUUID(), SignalType.MISSING_REQUIRED_CONCEPT,
+                FindingSubjectKind.ABSENCE, null, CoreConcepts.TERM, CoreConcepts.TERM, null,
+                IssueFamily.MISSING_REQUIRED_PROVISION, omission, List.of(UUID.randomUUID()),
+                WalkAwayAbsenceSpecs.WALK_AWAY_ABSENCE_SPEC,
+                WalkAwayAbsenceSpecs.WALK_AWAY_ABSENCE_VERSION, null, null, null, null, null,
+                Map.of("absenceProbability", 0.92, "route", "JEV"),
+                SignalType.MISSING_REQUIRED_CONCEPT.name() + ":" + candidateId, NOW);
+
+        var finding = assembler.assemble(run(), List.of(signal), NOW).get(0);
+
+        assertThat(finding.observationText()).isEqualTo(
+                "Your playbook's walk-away: No termination for convenience. "
+                        + "The closest clause, Term and termination, matches it.");
+        assertThat(finding.observationText()).doesNotContain("did not find");
+        assertThat(finding.claims())
+                .filteredOn(claim -> claim.claimKind() == ClaimKind.ABSENCE_BASIS)
+                .singleElement()
+                .satisfies(claim -> assertThat(claim.text())
+                        .contains("closest clause matches your playbook's walk-away")
+                        .doesNotContain("No clause in this contract addresses"));
     }
 
     @Test
@@ -284,13 +312,46 @@ class FindingAssemblerTest {
     }
 
     @Test
-    void p3AFindingRaisedByTheConditionCheckIsMediumAndRestorableToLow() {
-        var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.BEYOND_FALLBACK, false,
-                Map.of("levers", List.of("P3"), "categoryBeforeLevers", PolicyComparisonSpecs.WITHIN_FALLBACK))),
-                NOW).get(0);
+    void aPartialFallbackIsLowAndReviewRequiredAndNamesWhatTheClauseDoesNotState() {
+        var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WITHIN_FALLBACK, false,
+                Map.of("fallbackConditionsOutcome", FallbackConditionSpecs.PARTIAL,
+                        "fallbackConditions", List.of(
+                                Map.of("fallback", 1, "condition", "a thirty (30) day cure period",
+                                        "status", FallbackConditionSpecs.MET,
+                                        "quote", "thirty (30) days' notice"),
+                                Map.of("fallback", 1,
+                                        "condition", "the right to suspend performance before termination",
+                                        "status", FallbackConditionSpecs.NOT_STATED))))), NOW).get(0);
 
-        assertThat(finding.severity()).isEqualTo(FindingSeverity.MEDIUM);
-        assertThat(finding.quality()).containsEntry("severityWithoutLevers", "LOW");
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
+        assertThat(finding.reviewClassification()).isEqualTo(FindingClassification.REVIEW_REQUIRED);
+        assertThat(finding.observationText()).isEqualTo(
+                "Partly within your fallback. The clause does not state: the right to suspend "
+                        + "performance before termination. Check whether it is elsewhere in the contract.");
+        assertThat(finding.observationText()).doesNotContain("accept and note", "missing");
+        assertThat(finding.claims()).filteredOn(claim -> claim.claimKind() == ClaimKind.RECOMMENDATION)
+                .singleElement()
+                .satisfies(claim -> assertThat(claim.text()).isEqualTo(
+                        "Decide whether the clause is acceptable without these terms, or ask for them."));
+        assertThat(finding.quality())
+                .containsEntry("fallbackConditionsOutcome", FallbackConditionSpecs.PARTIAL)
+                .containsKey("fallbackConditions")
+                .doesNotContainKeys("levers", "fallbackConditionsUnknown");
+    }
+
+    @Test
+    void aFullyMetWithinFallbackKeepsTodaysNote() {
+        var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WITHIN_FALLBACK, false,
+                Map.of("fallbackConditionsOutcome", "WITHIN",
+                        "fallbackConditions", List.of(Map.of("fallback", 1, "condition", "the law is Swiss",
+                                "status", FallbackConditionSpecs.MET,
+                                "quote", "laws of Switzerland"))))), NOW).get(0);
+
+        assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
+        assertThat(finding.reviewClassification()).isEqualTo(FindingClassification.INFORMATIONAL);
+        assertThat(finding.observationText()).isEqualTo(
+                "The clause departs from the preferred position but stays within a listed fallback; "
+                        + "accept and note.");
     }
 
     @Test
@@ -346,8 +407,7 @@ class FindingAssemblerTest {
                 run(), List.of(deviation(PolicyComparisonSpecs.UNCLEAR, false, Map.of())), NOW).get(0);
 
         assertThat(finding.observationText()).isEqualTo(
-                "The clause depends on something outside the contract, so Rivell cannot tell "
-                        + "whether it meets your playbook.");
+                "Depends on terms outside this contract; check them before deciding.");
         assertThat(finding.observationText()).doesNotContain("compliance cannot be decided");
     }
 
@@ -366,8 +426,8 @@ class FindingAssemblerTest {
         assertThat(List.of(uncoveredFinding.observationText(), spottedFinding.observationText()))
                 .allSatisfy(text -> assertThat(text).doesNotContain("lawyer", "legal review"));
         assertThat(uncoveredFinding.observationText())
-                .isEqualTo("No playbook position addresses this clause, and it reads as unusual "
-                        + "for this kind of contract.");
+                .isEqualTo("No playbook position covers this clause. It may be unusual for this "
+                        + "kind of contract; check it.");
         assertThat(spottedFinding.observationText())
                 .isEqualTo("A whole-contract read named this clause as one our side must act on, "
                         + "but no playbook position check flagged it.");
@@ -404,18 +464,6 @@ class FindingAssemblerTest {
                         + "together. Please check both clauses yourself.");
         assertThat(classification.observationText() + carveOut.observationText())
                 .doesNotContain("bounded", "Please take a look");
-    }
-
-    @Test
-    void unknownFallbackConditionsAddALookNoteAndNeverChangeTheSeverity() {
-        var finding = assembler.assemble(run(), List.of(deviation(PolicyComparisonSpecs.WITHIN_FALLBACK, false,
-                Map.of("fallbackConditionsUnknown", List.of("the work is delivered from our UK studio")))),
-                NOW).get(0);
-
-        assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
-        assertThat(finding.claims()).anySatisfy(claim -> assertThat(claim.text())
-                .contains("could not be checked").contains("the work is delivered from our UK studio"));
-        assertThat(finding.quality()).doesNotContainKey("levers");
     }
 
     private static final String LIBRARY_WORDING =

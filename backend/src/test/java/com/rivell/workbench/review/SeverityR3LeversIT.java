@@ -1,6 +1,8 @@
 package com.rivell.workbench.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
@@ -12,15 +14,19 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.contracts.ContractEnrichmentService;
 import com.rivell.workbench.contracts.ContractIngestionService;
 import com.rivell.workbench.contracts.ContractType;
@@ -34,10 +40,12 @@ import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 /**
  * Severity R3 levers (P7) on a review: P1 an agreed second opinion lends its worse category, P2 a
  * confident WITHIN_FALLBACK whose worse mass reaches the margin gets a second opinion, P3 every final
- * WITHIN_FALLBACK is checked against the conditions of its listed fallback. Each lever tags the findings
- * it changes; a lever that cannot answer leaves the finding as it was.
+ * WITHIN_FALLBACK is checked against the conditions of its listed fallback and reports them on the
+ * finding without changing the category. Each lever tags the findings it changes; a lever that cannot
+ * answer leaves the finding as it was.
  */
 @SpringBootTest
+@AutoConfigureMockMvc
 @Testcontainers
 @Import({LiabilityReviewIT.FakeIntelligenceConfiguration.class,
         LiabilityReviewIT.CorpusConfiguration.class,
@@ -127,6 +135,17 @@ class SeverityR3LeversIT {
 
     @Autowired
     ContractEnrichmentService enrichmentService;
+
+    @Autowired
+    MockMvc mockMvc;
+
+    @Autowired
+    ObjectMapper objectMapper;
+
+    private JsonNode json(String url, Object... variables) throws Exception {
+        return objectMapper.readTree(mockMvc.perform(get(url, variables))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    }
 
     @BeforeEach
     void freshOrganization() {
@@ -291,38 +310,15 @@ class SeverityR3LeversIT {
     }
 
     @Test
-    void p3AnUnmetConditionWithAQuoteMakesAConfidentWithinBeyondFallbackAndTagsIt() throws Exception {
+    void p3APartlyStatedFallbackStaysWithinAsAReviewNoteAndNamesTheNotStatedCondition() throws Exception {
         var reviewId = reviewedContract();
         jevOnLiability(CLEAN_WITHIN);
-        generativeProvider.fallbackConditionLines = "1 | UNMET | {CLAUSE} | the cap is within the fallback multiple";
-
-        var run = analysisService.analyze(organizationId(), reviewId);
-
-        // one call per final WITHIN_FALLBACK, nothing more: every one of them was raised
-        var raised = liability(run.id(), IssueFamily.POSITION_NEEDS_FALLBACK);
-        assertThat(raised).isNotEmpty();
-        assertThat(generativeProvider.fallbackConditionCalls.get()).isGreaterThanOrEqualTo(2)
-                .isEqualTo(checkedPositions(run.id()));
-        assertThat(liability(run.id(), IssueFamily.POSITION_ACCEPTABLE_FALLBACK)).isEmpty();
-        assertThat(raised).allSatisfy(finding -> {
-            assertThat(finding.severity()).isEqualTo(FindingSeverity.MEDIUM);
-            assertThat(finding.quality())
-                    .containsEntry("category", PolicyComparisonSpecs.BEYOND_FALLBACK)
-                    .containsEntry("categoryBeforeLevers", PolicyComparisonSpecs.WITHIN_FALLBACK)
-                    .containsEntry("levers", List.of("P3"))
-                    .containsEntry("severityWithoutLevers", "LOW")
-                    .containsEntry("fallbackConditionsOutcome", "BEYOND");
-        });
-        // the conditions check sees the party and governing-law facts of the contract
-        assertThat(generativeProvider.fallbackConditionStates).allSatisfy(state ->
-                assertThat(state.facts()).isNotEmpty().anyMatch(fact -> fact.startsWith("Our side")));
-    }
-
-    @Test
-    void p3AnUnknownConditionKeepsTheFindingWithinWithALookNoteAndNoSeverityChange() throws Exception {
-        var reviewId = reviewedContract();
-        jevOnLiability(CLEAN_WITHIN);
-        generativeProvider.fallbackConditionLines = "1 | UNKNOWN | - | the work is delivered from our UK studio";
+        generativeProvider.fallbackConditionLines = "1 | MET | {CLAUSE} | the clause caps liability"
+                + " | The total liability of Supplier shall not exceed two times the fees paid in the"
+                + " preceding 12 months.\n"
+                + "1 | UNKNOWN | - | the cap is two times the fees paid in the preceding twelve months"
+                + " | The total liability of Supplier shall not exceed two times the fees paid in the"
+                + " preceding 12 months.";
 
         var run = analysisService.analyze(organizationId(), reviewId);
 
@@ -333,11 +329,58 @@ class SeverityR3LeversIT {
         assertThat(liability(run.id(), IssueFamily.POSITION_NEEDS_FALLBACK)).isEmpty();
         assertThat(kept).allSatisfy(finding -> {
             assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
+            assertThat(finding.reviewClassification()).isEqualTo(FindingClassification.REVIEW_REQUIRED);
+            assertThat(finding.observationText())
+                    .contains("Partly within your fallback")
+                    .contains("the cap is two times the fees paid in the preceding twelve months")
+                    .doesNotContain("accept and note", "missing");
+            assertThat(finding.quality())
+                    .containsEntry("category", PolicyComparisonSpecs.WITHIN_FALLBACK)
+                    .containsEntry("fallbackConditionsOutcome", "PARTIAL")
+                    .doesNotContainKey("levers");
+            assertThat((List<?>) finding.quality().get("fallbackConditions")).anySatisfy(condition ->
+                    assertThat(condition).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                            .containsEntry("status", "NOT_STATED"));
+        });
+        assertThat(judged(run.id())).anySatisfy(position -> assertThat(position)
+                .containsEntry("fallbackConditionsOutcome", "PARTIAL"));
+        JsonNode summary = null;
+        for (var item : json("/api/reviews/{id}/findings?limit=100", reviewId).at("/data/items")) {
+            if (kept.getFirst().id().toString().equals(item.path("id").asText())) {
+                summary = item;
+            }
+        }
+        assertThat(summary).as("the partly-within finding must be listed").isNotNull();
+        assertThat(summary.path("partlyWithinFallback").asBoolean()).isTrue();
+        // the conditions check sees the party and governing-law facts of the contract
+        assertThat(generativeProvider.fallbackConditionStates).allSatisfy(state ->
+                assertThat(state.facts()).isNotEmpty().anyMatch(fact -> fact.startsWith("Our side")));
+    }
+
+    @Test
+    void p3AConditionWithAnUnverifiableQuoteStaysWithinAsCouldNotCheck() throws Exception {
+        var reviewId = reviewedContract();
+        jevOnLiability(CLEAN_WITHIN);
+        generativeProvider.fallbackConditionLines = "1 | MET | the law is certainly Swiss"
+                + " | the law is Swiss"
+                + " | The total liability of Supplier shall not exceed two times the fees paid in the"
+                + " preceding 12 months.";
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var kept = liability(run.id(), IssueFamily.POSITION_ACCEPTABLE_FALLBACK);
+        assertThat(kept).isNotEmpty();
+        assertThat(generativeProvider.fallbackConditionCalls.get()).isGreaterThanOrEqualTo(2)
+                .isEqualTo(checkedPositions(run.id()));
+        assertThat(liability(run.id(), IssueFamily.POSITION_NEEDS_FALLBACK)).isEmpty();
+        assertThat(kept).allSatisfy(finding -> {
+            assertThat(finding.severity()).isEqualTo(FindingSeverity.LOW);
+            assertThat(finding.reviewClassification()).isEqualTo(FindingClassification.INFORMATIONAL);
             assertThat(finding.quality()).doesNotContainKey("levers")
-                    .containsEntry("fallbackConditionsOutcome", "WITHIN")
-                    .containsEntry("fallbackConditionsUnknown", List.of("the work is delivered from our UK studio"));
-            assertThat(finding.claims()).anySatisfy(claim ->
-                    assertThat(claim.text()).contains("the work is delivered from our UK studio"));
+                    .containsEntry("fallbackConditionsOutcome", "WITHIN");
+            assertThat((List<?>) finding.quality().get("fallbackConditions")).anySatisfy(condition ->
+                    assertThat(condition).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                            .containsEntry("status", "UNKNOWN"));
         });
     }
 
@@ -367,6 +410,7 @@ class SeverityR3LeversIT {
                 .filter(execution -> execution.detail().containsKey("positions")).toList())
                 .isNotEmpty().allSatisfy(execution -> assertThat(execution.detail().get("levers"))
                         .isEqualTo(Map.of("agreedWorseCategory", true, "withinSplitMargin", 0.45,
+                                "r1NeedsCorroboration", false,
                                 "fallbackConditions", true, "fallbackConditionsMaxChecks", 40)));
     }
 }

@@ -145,6 +145,8 @@ class SystemApiIT {
             assertThat(openApi.at("/components/schemas/FindingDetailView/properties/" + field)
                     .isMissingNode()).as("FindingDetailView." + field).isFalse();
         }
+        assertThat(openApi.at("/components/schemas/FindingSummaryView/properties/partlyWithinFallback")
+                .isMissingNode()).as("FindingSummaryView.partlyWithinFallback").isFalse();
         for (var field : new String[] {"route", "addressed", "searchFound", "searchFailed",
                 "spottedSeverity", "omissionCandidates", "searchedClauses", "presenceProbabilities",
                 "addressedBySearch", "flaggedBySearch"}) {

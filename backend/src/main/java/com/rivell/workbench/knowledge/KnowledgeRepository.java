@@ -35,6 +35,13 @@ public interface KnowledgeRepository {
      */
     List<KnowledgeArtifact> listArtifacts(UUID organizationId, Integer limit);
 
+    /**
+     * Every stored artifact, across organizations, for the one-time document-title
+     * re-derivation. The derivation reads each artifact's stored nodes, so this read is
+     * intentionally not organization-scoped.
+     */
+    List<KnowledgeArtifact> listArtifactsForMigration();
+
     Optional<KnowledgeSource> findSource(UUID artifactId, UUID organizationId);
 
     void insertNodes(UUID artifactId, List<KnowledgeSourceNode> nodes);
@@ -48,6 +55,9 @@ public interface KnowledgeRepository {
     List<ExtractionUnit> loadUnits(UUID artifactId, UUID organizationId);
 
     Optional<ExtractionUnit> findUnit(UUID unitId, UUID organizationId);
+
+    /** Every named unit that belongs to the organization: one read for a bundle's provenance. */
+    List<ExtractionUnit> findUnits(Set<UUID> unitIds, UUID organizationId);
 
     /**
      * Records a person's record-kind correction on one part, once: false when the part already
@@ -127,6 +137,18 @@ public interface KnowledgeRepository {
     List<KnowledgeCandidate> findPublishedCandidates(UUID organizationId);
 
     List<PublishedCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query);
+
+    /**
+     * Every published playbook position of the given artifacts visible at the pinned publication,
+     * after the scope dimensions other than contract type. The position's own contract-type scope
+     * is left to the caller: coverage must be able to show an out-of-scope position rather than
+     * drop it. Retrieval never uses this read.
+     */
+    List<PublishedCandidate> findPublishedPositionsForArtifacts(
+            UUID organizationId, long asOfPublicationNumber,
+            java.util.Collection<UUID> artifactIds, String contractPackKey,
+            String partyPerspective, String paperSource, String jurisdiction,
+            java.time.LocalDate effectiveOn);
 
     /**
      * The published playbooks and clause libraries that apply to a declared context, by the same

@@ -76,6 +76,10 @@ final class ContractIssueSpotter {
                     + "|(\\([a-z]\\)|\\([ivxlc]{1,4}\\)|\\(\\d{1,3}\\)|"
                     + "\\d{1,3}(?:\\.\\d{1,3})+[.):]?|\\d{1,3}[.)]|"
                     + "[a-z][.)]|[ivxlc]{1,6}[.)])\\s+)");
+    private static final Pattern TRAILING_PUNCTUATION = Pattern.compile("[.,;:]+$");
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+    private static final Pattern LIST_LABEL = Pattern.compile("[a-z][.)]|[ivxlc]{1,6}[.)]");
+    private static final Pattern LEADING_DIGITS = Pattern.compile("^([0-9]+).*$");
 
     private final GenerativeReasoningService generation;
     private final EvidenceService evidenceService;
@@ -244,7 +248,7 @@ final class ContractIssueSpotter {
             if (haystack.contains(candidate) || unlabelledHaystack.contains(candidate)) {
                 return true;
             }
-            var withoutFinalPunctuation = candidate.replaceAll("[.,;:]+$", "");
+            var withoutFinalPunctuation = TRAILING_PUNCTUATION.matcher(candidate).replaceAll("");
             if (hasWord(withoutFinalPunctuation)
                     && (haystack.contains(withoutFinalPunctuation)
                             || unlabelledHaystack.contains(withoutFinalPunctuation))) {
@@ -280,7 +284,8 @@ final class ContractIssueSpotter {
                 default -> normalized.append(character);
             }
         }
-        return normalized.toString().replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
+        return WHITESPACE.matcher(normalized.toString()).replaceAll(" ").trim()
+                .toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -297,10 +302,10 @@ final class ContractIssueSpotter {
             return text.substring(matcher.end());
         }
         var label = matcher.group(3);
-        if (label.startsWith("(") || label.matches("[a-z][.)]|[ivxlc]{1,6}[.)]")) {
+        if (label.startsWith("(") || LIST_LABEL.matcher(label).matches()) {
             return text.substring(matcher.end());
         }
-        var digits = label.replaceAll("^([0-9]+).*$", "$1");
+        var digits = LEADING_DIGITS.matcher(label).replaceAll("$1");
         if (!digits.equals(label) && Integer.parseInt(digits) == clauseNumber) {
             return text.substring(matcher.end());
         }

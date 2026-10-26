@@ -9,6 +9,7 @@ import { authorityLabel } from '../../lib/evidence'
 import {
   absenceClaims,
   approvalConflictLine,
+  approvalDeparture,
   approvalSourceLabel,
   approvalSummary,
   assessmentSummary,
@@ -18,6 +19,7 @@ import {
   decidedByLabel,
   escalateIfLine,
   escalateIfText,
+  fallbackConditionStatusLabel,
   findingGapText,
   findingIssueLabel,
   findingPlaybookRule,
@@ -67,6 +69,8 @@ interface Props {
   regionLabels: Map<string, string>
   /** The playbooks the review froze, used to name the source of a rule; null when unknown. */
   playbooksUsed: readonly PlaybookUsed[] | null
+  /** The contract type the review declared, for saying why a narrower position applies. */
+  contractType: string | null
   /** The clause as received, from the pinned contract structure. */
   currentText: string | null
   /** The clause body a replacement starts from, without its heading. */
@@ -247,7 +251,33 @@ export function FindingPanel(props: Props) {
   // A within-fallback finding is a note, not a defect. It becomes an approval question only
   // when a typed rule says the fallback needs approval (council §A.3), never from a trigger text.
   const withinFallback = finding.issueFamily === 'POSITION_ACCEPTABLE_FALLBACK'
+  const partialFallback =
+    withinFallback && finding.quality?.fallbackConditionsOutcome === 'PARTIAL'
+  const fallbackConditions = finding.quality?.fallbackConditions ?? []
+  // A partly-met fallback is the finding's substance, not a detail: its conditions sit under the gap.
+  const fallbackConditionList =
+    fallbackConditions.length > 0 ? (
+      <div className="rv-ws-sec" data-testid="fallback-conditions">
+        <div className="rv-ws-sec-h">Fallback conditions</div>
+        <ul className="rv-ws-conds">
+          {fallbackConditions.map((condition, index) => (
+            <li key={`${condition.fallback}-${index}`}>
+              <span className="rv-ws-cond-status">
+                {fallbackConditionStatusLabel(condition.status)}
+              </span>
+              <span className="rv-ws-cond-text">
+                {condition.condition}
+                {condition.quote ? (
+                  <span className="rv-ws-caption"> “{condition.quote}”</span>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ) : null
   const approval = approvalSummary(finding.quality)
+  const approvalDepartureLine = approvalDeparture(finding.issueFamily, approval)
   const approvalConflict = approvalConflictLine(approval)
   const escalateIf = escalateIfLine(approval)
   const approvalSource = approvalSourceLabel(approval?.source ?? null)
@@ -270,7 +300,12 @@ export function FindingPanel(props: Props) {
   const quoteText = quote ? (quote.source === 'contract' ? clauseExcerpt(quote.text) : quote.text) : null
   const quoteReason =
     quote?.source === 'second-opinion' ? (finding.quality?.secondOpinionReason?.trim() ?? null) : null
-  const playbookRule = findingPlaybookRule(finding, labelFor, props.playbooksUsed)
+  const playbookRule = findingPlaybookRule(
+    finding,
+    labelFor,
+    props.playbooksUsed,
+    props.contractType,
+  )
   const playbookCondition = escalateIfText(playbookRule?.escalation)
   const noApproverCondition = approval ? null : playbookCondition
   // the rule's condition and the playbook trigger can be the same words; show them once
@@ -347,6 +382,9 @@ export function FindingPanel(props: Props) {
               {playbookRule.basedOn ? (
                 <p className="rv-ws-caption">Based on: {playbookRule.basedOn}</p>
               ) : null}
+              {playbookRule.appliesTo ? (
+                <p className="rv-ws-caption">{playbookRule.appliesTo}</p>
+              ) : null}
               {playbookRule.escalation && !sameEscalation && (approval || noApproverCondition) ? (
                 <p className="rv-ws-caption">
                   {approval
@@ -363,6 +401,8 @@ export function FindingPanel(props: Props) {
               <p className="rv-ws-gap">{gapText}</p>
             </div>
           ) : null}
+
+          {partialFallback ? fallbackConditionList : null}
 
           {finding.quality?.wordingFitVerdict === 'DOES_NOT_FIT' && !proposedLanguage && !related ? (
             <p className="rv-ws-note">
@@ -426,22 +466,17 @@ export function FindingPanel(props: Props) {
 
           {approval && isActionable(finding) && !related ? (
             <p className="rv-ws-note rv-ws-note--approval">
-              <b>Approval is needed.</b>{' '}
-              {approval.approver} approves{' '}
-              {approval.stance === 'PROHIBITED' ? 'this walk-away' : 'this fallback'}
-              {approvalSource ? `, ${approvalSource}` : ''}.{' '}
-              {withinFallback
-                ? 'The clause stays within an acceptable fallback, and this rule says the fallback needs approval.'
-                : 'Escalate the finding, then resolve it with the approver’s name.'}
-              {escalateIf ? ` ${escalateIf}` : ''}
+              <b>Approval required: {approval.approver}</b>
+              {approvalDepartureLine ? ` ${approvalDepartureLine}` : ''}
+              {approvalSource ? ` (${approvalSource})` : ''}.{escalateIf ? ` ${escalateIf}` : ''}
               {approvalConflict ? ` ${approvalConflict}` : ''}
             </p>
           ) : null}
 
-          {withinFallback && !approval ? (
+          {withinFallback && !partialFallback && !approval ? (
             <p className="rv-ws-note">
               <b>This is a note, not a problem.</b> The clause departs from the preferred position
-              but stays within an acceptable fallback; accept and record it.
+              but stays within an acceptable fallback; you may accept it and record your reason.
             </p>
           ) : null}
         </div>
@@ -472,7 +507,11 @@ export function FindingPanel(props: Props) {
                 <div className="rv-ws-machine">
                   <p>
                     <span className="rv-ws-authority">
-                      {related ? 'Related guidance on a secondary topic' : observationKindLabel(finding.observationKind)}
+                      {related
+                        ? 'Related guidance on a secondary topic'
+                        : withinFallback
+                          ? findingIssueLabel(finding)
+                          : observationKindLabel(finding.observationKind)}
                     </span>
                   </p>
                   {absences.map((claim) => (
@@ -519,6 +558,8 @@ export function FindingPanel(props: Props) {
                 caption={finding.quality?.foundBy === 'SEARCH' ? SEARCH_CAPTION : null}
               />
             ) : null}
+
+            {partialFallback ? null : fallbackConditionList}
 
             {finding.evidenceItems.length > 0 ? (
               // Condensed: the main blocks say what matters, so the full source list is one

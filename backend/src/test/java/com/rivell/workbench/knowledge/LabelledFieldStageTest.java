@@ -145,16 +145,20 @@ class LabelledFieldStageTest {
     }
 
     @Test
-    void anApprovalPathSentenceWithoutAStanceWordAppliesToTheApproverForThatEntry() {
-        var rules = LabelledFieldStage.documentRules(
+    void aReviewersOwnAuthorityToApplyAFallbackIsNotAnApproval() {
+        // the source says the person doing the review may take the fallback and record
+        // why; that is their authority, not a second approver to route to
+        var sentence = LabelledFieldStage.documentRules(
                 "The lawyer handling the NDA may apply the fallbacks above and record the reason in the matter file.",
                 Map.of());
+        var columns = new java.util.LinkedHashMap<String, String>();
+        columns.put("Issue", "Routine term, marking, or return mechanics");
+        columns.put("Route to", "Reviewing Commercial Legal counsel");
+        columns.put("Decision needed", "Within stated fallback");
+        var table = LabelledFieldStage.documentRules("", columns);
 
-        assertThat(rules).singleElement().satisfies(scoped -> {
-            assertThat(scoped.rule().approver()).isEqualTo("The lawyer handling the NDA");
-            assertThat(scoped.rule().stances()).containsExactly(PositionRole.FALLBACK);
-            assertThat(scoped.rule().condition()).isNull();
-        });
+        assertThat(sentence).isEmpty();
+        assertThat(table).isEmpty();
     }
 
     @Test

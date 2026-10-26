@@ -9,9 +9,10 @@ import com.rivell.workbench.retrieval.EvidenceItem;
 
 /**
  * Council §A.3: a finding escalates only when a typed rule applies. A walk-away or a clause
- * beyond the fallback escalates with the rule that covers that stance; a within-fallback note
- * needs approval only when a rule says the fallback itself needs it. A condition becomes the
- * "Escalate if" line. No rule means no approval, never an inferred one.
+ * beyond the fallback escalates with the rule that covers that stance; a within-fallback note,
+ * or an unclear reading that may be one, needs approval only when a rule says the fallback
+ * itself needs it. A condition becomes the panel's "Escalate if" line for a walk-away and its
+ * "Approval applies if" line for a fallback. No rule means no approval, never an inferred one.
  */
 final class EscalationAuthority {
 
@@ -46,16 +47,17 @@ final class EscalationAuthority {
             // fallback approver can approve anything beyond the preferred position
             return decision(facts, rule(facts, PositionRole.PROHIBITED), PositionRole.PROHIBITED);
         }
-        if (PolicyComparisonSpecs.BEYOND_FALLBACK.equals(category)
-                || PolicyComparisonSpecs.UNCLEAR.equals(category)) {
+        if (PolicyComparisonSpecs.BEYOND_FALLBACK.equals(category)) {
             var fallback = rule(facts, PositionRole.FALLBACK);
             if (fallback != null) {
                 return decision(facts, fallback, PositionRole.FALLBACK);
             }
             return decision(facts, rule(facts, PositionRole.PROHIBITED), PositionRole.PROHIBITED);
         }
-        if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(category)) {
-            // within the fallback needs approval only when a rule says the fallback needs it
+        if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(category)
+                || PolicyComparisonSpecs.UNCLEAR.equals(category)) {
+            // a fallback note, or a reading that may be one, needs approval only when a rule
+            // says the fallback needs it; an unclear reading is not itself a walk-away
             return decision(facts, rule(facts, PositionRole.FALLBACK), PositionRole.FALLBACK);
         }
         return null;

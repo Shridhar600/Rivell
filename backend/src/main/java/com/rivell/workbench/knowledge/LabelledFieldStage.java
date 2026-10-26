@@ -17,7 +17,9 @@ import java.util.Set;
  *
  * <p>The stage never guesses. A label it does not know produces no stance; a stated label with
  * no value is unmapped; a sentence creates an authority rule only when it names an approver, so a
- * trigger text alone can never make an approval (council §A.3).
+ * trigger text alone can never make an approval (council §A.3). A grant to the person doing the
+ * review ("reviewing counsel may apply this fallback") is that person's authority, not an
+ * approval rule.
  */
 final class LabelledFieldStage {
 
@@ -47,6 +49,21 @@ final class LabelledFieldStage {
 
     private static final Set<String> BOUNDARY_WORDS = Set.of(
             "before", "if", "when", "where", "unless", "on", "for", "after", "once");
+
+    private static final java.util.regex.Pattern APPROVAL_REQUIRED =
+            java.util.regex.Pattern.compile(
+                    "(?i)^(.+?)\\s+(?:written\\s+)?(?:approval|authorisation|authorization)"
+                            + "\\s+(?:is|are)\\s+required\\b(.*)$");
+    private static final java.util.regex.Pattern OWNS_POSITIONS =
+            java.util.regex.Pattern.compile(
+                    "(?i)^(.+?)\\s+owns?\\s+(?:the\\s+)?(.+?)\\s+positions?\\b(.*)$");
+    private static final java.util.regex.Pattern PASSIVE_APPROVAL =
+            java.util.regex.Pattern.compile(
+                    "(?i)\\b(?:approved|authorised|authorized)\\s+by\\b");
+    private static final java.util.regex.Pattern APPROVAL_VERB =
+            java.util.regex.Pattern.compile("(?i)\\bapprove[sd]?\\b");
+    private static final java.util.regex.Pattern REQUIRES_VERB =
+            java.util.regex.Pattern.compile("(?i)\\brequires?\\b");
 
     private enum Field {
         PREFERRED, FALLBACK, PROHIBITED, ESCALATION, APPROVER
@@ -699,10 +716,7 @@ final class LabelledFieldStage {
     /** "CFO approval is required for fallbacks above 10%": the role comes first. */
     private static void ruleFromApprovalRequired(
             String sentence, AuthorityLevel level, List<AuthoritySourceRule> rules) {
-        var matcher = java.util.regex.Pattern
-                .compile("(?i)^(.+?)\\s+(?:written\\s+)?(?:approval|authorisation|authorization)"
-                        + "\\s+(?:is|are)\\s+required\\b(.*)$")
-                .matcher(sentence);
+        var matcher = APPROVAL_REQUIRED.matcher(sentence);
         if (!matcher.find()) {
             return;
         }
@@ -721,9 +735,7 @@ final class LabelledFieldStage {
     /** "Legal owns the commercial positions": an ownership row names the default approver. */
     private static void ruleFromOwnership(
             String sentence, AuthorityLevel level, List<AuthoritySourceRule> rules) {
-        var matcher = java.util.regex.Pattern
-                .compile("(?i)^(.+?)\\s+owns?\\s+(?:the\\s+)?(.+?)\\s+positions?\\b(.*)$")
-                .matcher(sentence);
+        var matcher = OWNS_POSITIONS.matcher(sentence);
         if (!matcher.find()) {
             return;
         }
@@ -740,8 +752,7 @@ final class LabelledFieldStage {
     /** "Fallbacks must be approved by the Commercial Manager": the role follows the verb. */
     private static void ruleFromPassiveApproval(
             String sentence, AuthorityLevel level, List<AuthoritySourceRule> rules) {
-        var matcher = java.util.regex.Pattern
-                .compile("(?i)\\b(?:approved|authorised|authorized)\\s+by\\b").matcher(sentence);
+        var matcher = PASSIVE_APPROVAL.matcher(sentence);
         if (!matcher.find() || matcher.start() == 0) {
             return;
         }
@@ -770,7 +781,7 @@ final class LabelledFieldStage {
 
     private static void ruleFromApprovalVerb(
             String sentence, AuthorityLevel level, List<AuthoritySourceRule> rules) {
-        var matcher = java.util.regex.Pattern.compile("(?i)\\bapprove[sd]?\\b").matcher(sentence);
+        var matcher = APPROVAL_VERB.matcher(sentence);
         if (!matcher.find() || matcher.start() == 0) {
             return;
         }
@@ -830,7 +841,7 @@ final class LabelledFieldStage {
 
     private static void ruleFromRequiresApproval(
             String sentence, AuthorityLevel level, List<AuthoritySourceRule> rules) {
-        var matcher = java.util.regex.Pattern.compile("(?i)\\brequires?\\b").matcher(sentence);
+        var matcher = REQUIRES_VERB.matcher(sentence);
         if (!matcher.find()) {
             return;
         }
@@ -890,7 +901,9 @@ final class LabelledFieldStage {
             var subject = sentence.substring(0, index).strip();
             var rest = sentence.substring(index + verb.length()).strip();
             var approver = validApprover(subject);
-            if (approver == null) {
+            if (approver == null || isReviewerAuthority(approver)) {
+                // "reviewing counsel may apply this fallback" grants the reviewer the authority
+                // to take the fallback; it does not name a second person to approve it
                 return;
             }
             var condition = conditionAfter(rest);
@@ -1055,6 +1068,19 @@ final class LabelledFieldStage {
         return NONE_VALUES.contains(RecordLabelRoles.normalize(value));
     }
 
+    /**
+     * A role that is the person doing this review ("reviewing counsel", "the lawyer handling
+     * the NDA"), not someone whose approval must be obtained. The source grants them authority
+     * to take the fallback and record why, so the grant is not an approval rule.
+     */
+    private static boolean isReviewerAuthority(String approver) {
+        var normalized = RecordLabelRoles.normalize(approver);
+        return normalized.startsWith("reviewing ")
+                || normalized.startsWith("the reviewing ")
+                || normalized.startsWith("lawyer handling ")
+                || normalized.startsWith("the lawyer handling ");
+    }
+
     private static String validApprover(String value) {
         var cleaned = cleanShortValue(value);
         if (cleaned == null || isNone(cleaned)) {
@@ -1175,10 +1201,17 @@ final class LabelledFieldStage {
         if (approver == null) {
             return null;
         }
+        var condition = cleanValue(decisionValue);
+        var withinStatedFallback = condition != null
+                && condition.toLowerCase(Locale.ROOT).contains("within stated fallback");
+        if (withinStatedFallback && isReviewerAuthority(approver)) {
+            // "Reviewing counsel ... Within stated fallback" is the reviewer's own authority,
+            // not an approval by a second person
+            return null;
+        }
         var stances = stancesOf((decisionValue == null ? "" : decisionValue) + " "
                 + (issueValue == null ? "" : issueValue));
-        var condition = cleanValue(decisionValue);
-        if (condition != null && condition.toLowerCase(Locale.ROOT).contains("within stated fallback")) {
+        if (withinStatedFallback) {
             stances = Set.of(PositionRole.FALLBACK);
         }
         if (condition != null && condition.toLowerCase(Locale.ROOT).startsWith("before ")) {

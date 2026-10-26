@@ -30,7 +30,6 @@ import com.rivell.workbench.review.ApprovedDraftingPayload;
 import com.rivell.workbench.review.CheckMechanism;
 import com.rivell.workbench.review.ClauseTopics;
 import com.rivell.workbench.review.DeviationUncertainPayload;
-import com.rivell.workbench.review.FallbackConditionSpecs;
 import com.rivell.workbench.review.IssueFamily;
 import com.rivell.workbench.review.OpenEndedAnalysisPayload;
 import com.rivell.workbench.review.OurSide;
@@ -68,9 +67,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     /** Severity R3 lever tags (P7) and the route reason of a position P2 sent to the second opinion. */
     private static final String P1 = "P1";
     private static final String P2 = "P2";
-    private static final String P3 = "P3";
     private static final String P2_WITHIN_SPLIT = "P2_WITHIN_SPLIT";
-    private static final int MAX_UNKNOWN_NOTES = 5;
 
     private final SemanticDecisionService decisionService;
     private final PositionLanguageGenerator languageGenerator;
@@ -84,6 +81,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     private final LlmAdjudicator adjudicator;
     private final AdjudicationBudget budget;
     private final boolean agreedWorseCategory;
+    private final boolean r1NeedsCorroboration;
     private final boolean fallbackConditionsEnabled;
     private final int maxConditionChecks;
     private final FallbackConditionChecker conditionChecker;
@@ -112,6 +110,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         this.adjudicator = new LlmAdjudicator(reasoningService);
         this.budget = new AdjudicationBudget(routing.maxAdjudications());
         this.agreedWorseCategory = engineProperties.severity().agreedWorseCategory();
+        this.r1NeedsCorroboration = engineProperties.severity().r1NeedsCorroboration();
         this.fallbackConditionsEnabled = engineProperties.fallbackConditions().enabled();
         this.maxConditionChecks = engineProperties.fallbackConditions().maxChecks();
         this.splitBudget = new AdjudicationBudget(routing.maxAdjudications());
@@ -157,6 +156,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var positions = bundle.policyItems();
         // reviews stay reproducible: the lever settings this comparison ran with are kept with it
         detail.put("levers", Map.of("agreedWorseCategory", agreedWorseCategory,
+                "r1NeedsCorroboration", r1NeedsCorroboration,
                 "withinSplitMargin", routing.withinSplitMargin(),
                 "fallbackConditions", fallbackConditionsEnabled,
                 "fallbackConditionsMaxChecks", maxConditionChecks));
@@ -165,10 +165,11 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 bundle.degradationWarnings().contains("POLICY_POSITIONS_TRUNCATED"));
         var state = comparisonState(context, clause);
         // engine v2 P3: the judge reads the definitions of the terms the clause uses; with the
-        // property off the state stays as before, and the triage and probe keep it always
-        var definitions = definitionsEnabled
-                ? ClauseDefinitions.of(bundle) : ClauseDefinitions.empty();
-        var judgeState = comparisonState(context, clause, definitions.texts());
+        // property off the judge state stays as before. The second opinion always reads them: it
+        // is the fallback that decides whether the clause's own words were enough.
+        var definitions = ClauseDefinitions.of(bundle);
+        var judgeDefinitions = definitionsEnabled ? definitions.texts() : List.<String>of();
+        var judgeState = comparisonState(context, clause, judgeDefinitions);
         var definitionsUsed = new boolean[1];
         var judgedPositions = new ArrayList<JudgedPosition>(positions.size());
         Map<String, PolicyComparisonOutcome.Judgement> probe = Map.of();
@@ -177,7 +178,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             try {
                 execution = decisionService.evaluate(PolicyComparisonSpecs.spec(
                         PolicyPositionQuestions.build(positions, clause, conceptRegistry)), judgeState);
-                definitionsUsed[0] |= !definitions.isEmpty();
+                definitionsUsed[0] |= !judgeDefinitions.isEmpty();
             } catch (SpecStateMismatchException | UnknownDecisionSpecException
                     | NoProviderConfiguredException e) {
                 return CheckOutcome.failed(
@@ -215,7 +216,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 try {
                     var execution = decisionService.evaluate(PolicyComparisonSpecs.spec(
                             PolicyPositionQuestions.build(found, clause, conceptRegistry)), judgeState);
-                    definitionsUsed[0] |= !definitions.isEmpty();
+                    definitionsUsed[0] |= !judgeDefinitions.isEmpty();
                     var missing = judge(found, execution, searchBundle, SEARCH_KEY_PREFIX,
                             judgedPositions);
                     if (missing != null) {
@@ -243,7 +244,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         }
         // one fit pack for the clause: the positions the text search found and the library
         // wording a flagged position would offer (engine decision §B.1)
-        var wordingByKey = wordingFor(judgedPositions, resolutions);
+        var wordingByKey = wordingFor(clause, judgedPositions, resolutions);
         var fit = fit(context, clause, judgedPositions, wordingByKey);
         putFitSummary(detail, fit);
         if (searchDetail != null) {
@@ -263,7 +264,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                     .toList());
         }
         var signals = new ArrayList<RawReviewSignal>();
-        var definitionsCarried = !definitions.isEmpty();
+        var judgeDefinitionsCarried = !judgeDefinitions.isEmpty();
+        var opinionDefinitionsCarried = !definitions.isEmpty();
         for (var judged : judgedPositions) {
             if (!applied(judged, fit)) {
                 // a search hit that does not govern the clause is not applied; the detail keeps it
@@ -272,11 +274,12 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             var opinion = opinions.effective(judged.key());
             var resolution = resolutions.get(judged.key());
             if (opinion != null && !opinion.agreed()) {
-                signals.add(needsYourLook(context, clause, judged, opinion, definitionsCarried,
-                        resolution, fit));
+                signals.add(needsYourLook(context, clause, judged, opinion,
+                        opinionDefinitionsCarried, resolution, fit));
             } else if (judged.judgement().flagged()) {
                 signals.addAll(flaggedSignals(context, clause, judged, opinion, detail,
-                        definitionsCarried, resolution, wordingByKey, fit));
+                        judgeDefinitionsCarried || (opinion != null && opinionDefinitionsCarried),
+                        resolution, wordingByKey, fit));
             }
         }
         if (definitionsUsed[0]) {
@@ -438,9 +441,11 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     /**
      * Severity R3 on one judged position. P1: an agreed second opinion lends its category when it is
      * worse. P3: a final WITHIN_FALLBACK on the clause's own topic is checked against the conditions of
-     * its fallback; a quoted unmet condition in every listed fallback makes it BEYOND_FALLBACK, nothing
-     * else changes it. {@code levers} lists the levers whose work this finding's category or kind depends
-     * on, so a counterfactual can drop them; a lever that could not answer changes nothing.
+     * its fallback; the conditions are recorded on the finding and never change its category.
+     * R1: a disagreement the second opinion calls a walk-away or beyond-fallback records the
+     * corroborating signal the severity rule needs when that rule is on.
+     * {@code levers} lists the levers whose work this finding's category or kind depends on, so a
+     * counterfactual can drop them; a lever that could not answer changes nothing.
      */
     private Resolution resolve(
             ReviewCheckContext context, ClauseSemantics clause,
@@ -453,6 +458,10 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             // Jev's WITHIN note became a "needs your look" item because P2 asked
             if (routeReason != null) {
                 levers.add(P2);
+            }
+            // R1 calibration: the raise to MEDIUM needs a second signal on the same clause
+            if (r1NeedsCorroboration && r1NamesWorse(opinion)) {
+                levers.add(r1Corroboration(context, clause, state, judged, contractFacts));
             }
             return new Resolution(null, List.copyOf(levers), routeReason, null, null);
         }
@@ -477,12 +486,35 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         if (fallbackConditionsEnabled && PolicyComparisonSpecs.WITHIN_FALLBACK.equals(category)
                 && (judged.searched() || !governsOnlySecondaryTopic(clause, judged.position()))) {
             conditions = checkConditions(context, clause, state, judged, contractFacts);
-            if (conditions.raises()) {
-                category = PolicyComparisonSpecs.BEYOND_FALLBACK;
-                levers.add(P3);
-            }
         }
         return new Resolution(category, List.copyOf(levers), routeReason, secondOpinionCategory, conditions);
+    }
+
+    /** R1: a second opinion that names a walk-away or beyond-fallback can raise the look item. */
+    private static boolean r1NamesWorse(LlmAdjudicator.SecondOpinion opinion) {
+        return PolicyComparisonSpecs.WALK_AWAY.equals(opinion.category())
+                || PolicyComparisonSpecs.BEYOND_FALLBACK.equals(opinion.category());
+    }
+
+    /**
+     * R1 corroboration: the second signal on this clause that agrees the clause is worse than the
+     * preferred position. The fallback-condition check answers first (PARTIAL means the clause
+     * fails the listed fallback); otherwise the whole-contract read is asked whether it named this
+     * clause. Neither signal answering leaves the rule's raise without support.
+     */
+    private String r1Corroboration(
+            ReviewCheckContext context, ClauseSemantics clause,
+            PolicyComparisonSpecs.PolicyComparisonState state, JudgedPosition judged,
+            List<String> contractFacts) {
+        if (fallbackConditionsEnabled) {
+            var conditions = checkConditions(context, clause, state, judged, contractFacts);
+            if (FallbackConditionChecker.Result.PARTIAL.equals(conditions.outcome())) {
+                return PolicyComparisonSpecs.R1_P3;
+            }
+        }
+        var spots = spotter.spots(context, judged.bundle().request());
+        return !spots.unavailable() && spots.spots().containsKey(clause.headingNodeId())
+                ? PolicyComparisonSpecs.R1_SPOT : PolicyComparisonSpecs.R1_NONE;
     }
 
     private FallbackConditionChecker.Result checkConditions(
@@ -523,7 +555,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     /**
      * The lever work on one judged position. {@code category}: the final category of a flagged finding
      * (null when the position yields none or a "needs your look" item); {@code conditions}: the P3 check
-     * when one ran.
+     * when one ran; {@code levers}: the tags recorded for the eval, including R1's corroboration tag
+     * (R1:P3, R1:SPOT or R1:NONE) on a disagreement.
      */
     private record Resolution(
             String category, List<String> levers, String routeReason, String secondOpinionCategory,
@@ -533,7 +566,9 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     /**
      * Jev and the second opinion disagree, or the second opinion could not be had (failed, invalid,
      * over budget): the position becomes a LOW "needs your look" item with both views, never a
-     * MEDIUM+ finding and never a silent pass (spec §6 HUMAN, §7). No null goes into the quality.
+     * silent pass (spec §6 HUMAN, §7). R1 raises a disagreement that names a walk-away or
+     * beyond-fallback to MEDIUM; with the corroboration rule on, only a second signal on the clause
+     * lets it raise. No null goes into the quality.
      */
     private RawReviewSignal needsYourLook(
             ReviewCheckContext context, ClauseSemantics clause, JudgedPosition judged,
@@ -541,7 +576,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
             ClauseFitCheck.Outcome fit) {
         var bundle = judged.bundle();
         var execution = judged.execution();
-        // when the judge read this position's own bundle's definitions, the finding cites them
+        // when the definitions of this position's own bundle were read, the finding cites them
         var evidence = definitionsCarried
                 ? union(union(List.of(judged.position().evidenceId()),
                         subjectEvidence(bundle, clause.id())),
@@ -552,12 +587,16 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var jev = judged.judgement();
         var quality = new LinkedHashMap<String, Object>();
         quality.put("route", NEEDS_YOUR_LOOK);
+        // the coverage list links this finding to its position; the payload has no candidate id
+        quality.put("positionCandidateId", judged.position().sourceCandidateId().toString());
         if (resolution.routeReason() != null) {
             quality.put("routeReason", resolution.routeReason());
         }
         if (!resolution.levers().isEmpty()) {
             quality.put("levers", resolution.levers());
-            quality.put("categoryBeforeLevers", jev.category());
+            if (jev.category() != null) {
+                quality.put("categoryBeforeLevers", jev.category());
+            }
         }
         if (judged.searched()) {
             quality.put("foundBy", SEARCH);
@@ -622,7 +661,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         var execution = judged.execution();
         var category = resolution.category();
         var family = PolicyComparisonOutcome.family(category);
-        // when the judge read this position's own bundle's definitions, the finding cites them
+        // when the definitions of this position's own bundle were read, the finding cites them
         var evidence = definitionsCarried
                 ? union(union(List.of(judged.position().evidenceId()),
                         subjectEvidence(bundle, clause.id())),
@@ -657,9 +696,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                         execution.executionId())
                 .resolvedModel(execution.metadata().resolvedModel())
                 .usage(execution.metadata().usage())
-                .generativeExecution(resolution.conditions() != null && resolution.conditions().raises()
-                        ? resolution.conditions().executionId()
-                        : opinion == null ? null : opinion.executionId())
+                .generativeExecution(opinion == null ? null : opinion.executionId())
                 .quality(flaggedQuality(judged, secondaryTopic,
                         opinion == null ? JEV : SECOND_OPINION, resolution, opinion,
                         attempt == null ? null : attempt.failure(), fit))
@@ -894,15 +931,19 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     /**
      * The library wording each flagged position would offer, and the gap that wording must cure.
      * Selection is the same one {@code flaggedSignals} uses, so the fit question is asked about
-     * exactly the variant that would be proposed.
+     * exactly the variant that would be proposed. A related position never offers wording, so its
+     * variant is not asked about at all.
      */
-    private Map<String, Wording> wordingFor(List<JudgedPosition> judgedPositions,
-            Map<String, Resolution> resolutions) {
+    private Map<String, Wording> wordingFor(ClauseSemantics clause,
+            List<JudgedPosition> judgedPositions, Map<String, Resolution> resolutions) {
         var wording = new LinkedHashMap<String, Wording>();
         for (var judged : judgedPositions) {
             var resolution = resolutions.get(judged.key());
             if (resolution == null || resolution.category() == null
                     || !wantsLanguage(resolution.category())) {
+                continue;
+            }
+            if (!judged.searched() && governsOnlySecondaryTopic(clause, judged.position())) {
                 continue;
             }
             // the bundle that judged the position carries its drafting: the search bundle for a
@@ -1048,7 +1089,8 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         if (!resolution.levers().isEmpty()) {
             quality.put("levers", resolution.levers());
             quality.put("categoryBeforeLevers", judged.judgement().category());
-            // the signal links one generation; when P3 raised it, the second opinion's is kept here
+            // the signal links one generation; when a lever changed the category, the second
+            // opinion's is kept here
             if (opinion != null && opinion.executionId() != null) {
                 quality.put("secondOpinionExecutionId", opinion.executionId().toString());
             }
@@ -1061,16 +1103,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
                 if (conditions.executionId() != null) {
                     quality.put("fallbackConditionsExecutionId", conditions.executionId().toString());
                 }
-                var unknown = conditions.unknown().stream()
-                        .map(FallbackConditionChecker.Condition::text).limit(MAX_UNKNOWN_NOTES).toList();
-                if (!unknown.isEmpty()) {
-                    quality.put("fallbackConditionsUnknown", unknown);
-                }
-                if (conditions.raises()) {
-                    quality.put("fallbackConditionsUnmet", conditions.conditions().stream()
-                            .filter(condition -> FallbackConditionSpecs.UNMET.equals(condition.status()))
-                            .map(condition -> condition.text() + " (\"" + condition.quote() + "\")").toList());
-                }
+                quality.put("fallbackConditions", conditions.conditions());
             }
         }
         return quality;

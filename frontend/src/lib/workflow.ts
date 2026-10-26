@@ -68,6 +68,7 @@ export function humanStatusLabel(status: HumanReviewStatus): string {
 const BLOCKER_LABELS: Record<string, string> = {
   ANALYSIS_NOT_COMPLETE: 'The automated analysis is not complete.',
   ANALYSIS_DEGRADED: 'The analysis produced no trustworthy result.',
+  ANALYSIS_PARTIAL: 'Some checks did not finish.',
   UNRESOLVED_BLOCKING_FINDINGS: 'Blocking findings still need a decision.',
   UNRESOLVED_REVIEW_REQUIRED_FINDINGS:
     'Findings that require review still need a decision.',

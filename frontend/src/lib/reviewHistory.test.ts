@@ -114,6 +114,13 @@ describe('reviewLifecycle: the canonical states, from server facts', () => {
     expect(lifecycle).toMatchObject({ label: 'Analysis incomplete', group: 'needs' })
   })
 
+  it('does not offer a review when some planned checks did not finish', () => {
+    const lifecycle = reviewLifecycle(
+      item({ humanReview: human({ status: 'NOT_STARTED', blockers: ['ANALYSIS_PARTIAL'] }) }),
+    )
+    expect(lifecycle).toMatchObject({ label: 'Analysis incomplete', group: 'needs' })
+  })
+
   it('offers no verified redline without a downloadable artifact', () => {
     const lifecycle = reviewLifecycle(
       item({

@@ -289,7 +289,7 @@ class PositionSearchRouteIT {
     }
 
     /**
-     * R2-006: a search-found position that does not govern the clause is not applied. The check
+     * A search-found position that does not govern the clause is not applied. The check
      * records it as "not covered" and the diagnostics keep it visible, with no finding resting on it.
      */
     @Test

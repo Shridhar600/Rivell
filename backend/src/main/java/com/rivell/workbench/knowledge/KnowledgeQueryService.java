@@ -140,6 +140,22 @@ public class KnowledgeQueryService {
     }
 
     /**
+     * System-level read for analysis finalisation: every published playbook position of the
+     * playbooks the review froze, at its pinned publication, before the position's own
+     * contract-type scope is applied. Coverage classifies those as in or out of scope; retrieval
+     * never uses this read.
+     */
+    public List<PublishedCandidate> listPublishedPositionsForArtifacts(
+            UUID organizationId, long asOfPublicationNumber,
+            java.util.Collection<UUID> artifactIds, String contractPackKey,
+            String partyPerspective, String paperSource, String jurisdiction,
+            java.time.LocalDate effectiveOn) {
+        return repository.findPublishedPositionsForArtifacts(organizationId,
+                asOfPublicationNumber, artifactIds, contractPackKey, partyPerspective,
+                paperSource, jurisdiction, effectiveOn);
+    }
+
+    /**
      * The playbooks and clause libraries that apply to the caller's chosen context. The as-of
      * publication is the organization's latest, so the preview names what a review created now
      * would freeze.
@@ -185,6 +201,30 @@ public class KnowledgeQueryService {
     public java.util.Optional<ExtractionUnit> findUnitForOrganization(
             UUID organizationId, UUID unitId) {
         return repository.findUnit(unitId, organizationId);
+    }
+
+    /** System-level read of the named units, keyed by id: one query for a bundle's provenance. */
+    public java.util.Map<UUID, ExtractionUnit> findUnitsForOrganization(
+            UUID organizationId, java.util.Set<UUID> unitIds) {
+        return repository.findUnits(unitIds, organizationId).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        ExtractionUnit::id, unit -> unit));
+    }
+
+    /**
+     * Source-node ids per extraction unit, for the units a bundle's items cite: one query, and a
+     * unit the organization cannot see is left out so its item carries no provenance.
+     */
+    public java.util.Map<UUID, java.util.List<String>> sourceNodeIdsForUnits(
+            UUID organizationId, java.util.Set<UUID> unitIds) {
+        if (unitIds.isEmpty()) {
+            return java.util.Map.of();
+        }
+        var byUnit = new java.util.LinkedHashMap<UUID, java.util.List<String>>();
+        for (var unit : findUnitsForOrganization(organizationId, unitIds).values()) {
+            byUnit.put(unit.id(), unit.sourceNodeIds().stream().map(UUID::toString).toList());
+        }
+        return java.util.Map.copyOf(byUnit);
     }
 
     public boolean publicationNumberExists(long publicationNumber) {

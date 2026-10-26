@@ -135,6 +135,19 @@ describe('lifecycleKey: human review comes from server state, never from counts'
     ).toBe('degraded')
   })
 
+  it('a partial analysis offers no review either', () => {
+    expect(
+      lifecycleKey(
+        facts({
+          humanReview: fixtureHumanReview({
+            status: 'NOT_STARTED',
+            blockers: [{ code: 'ANALYSIS_PARTIAL', message: 'x', findingIds: [] }],
+          }),
+        }),
+      ),
+    ).toBe('degraded')
+  })
+
   it('claims no attention for a completed review that still reports the analysis as incomplete', () => {
     expect(
       lifecycleKey(

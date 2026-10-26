@@ -39,6 +39,10 @@ final class KnowledgeDocumentTitle {
             "(?i)^\\s*(?:(?:article|section|clause|part)\\s+)?"
                     + "(?:\\d{1,3}(?:\\.\\d{1,3})*|\\(?[ivxlc]{1,6}\\)?)[.):]?\\s+");
 
+    /** A workbook's cover sheet, whose first cell names the workbook. */
+    private static final Pattern COVER_SHEET = Pattern.compile(
+            "(?i)^\\s*(?:guide|cover|about)(?:\\s.*)?$");
+
     /** Cover legends are notices, not names. */
     private static final Pattern LEGEND = Pattern.compile(
             "(?i)\\b(?:confidential|draft|privileged|strictly private|internal use only|"
@@ -56,13 +60,17 @@ final class KnowledgeDocumentTitle {
     }
 
     /**
-     * The document title and the node it came from, or null when the document names none or is
-     * a workbook. The node id matters: only that node may use the title as a section name.
+     * The document title and the node it came from, or null when the document names none.
+     * A workbook is named by the first cell of its Guide or cover sheet.
+     * The node id matters: only that node may use the title as a section name.
      */
     static DocumentTitle of(List<KnowledgeSourceNode> nodes) {
         var root = nodes.stream().filter(node -> node.parentId() == null).findFirst().orElse(null);
-        if (root == null || root.nodeType() == KnowledgeNodeType.WORKBOOK) {
+        if (root == null) {
             return null;
+        }
+        if (root.nodeType() == KnowledgeNodeType.WORKBOOK) {
+            return coverSheetTitle(nodes, root);
         }
         var leading = nodes.stream()
                 .filter(node -> root.id().equals(node.parentId()))
@@ -150,6 +158,37 @@ final class KnowledgeDocumentTitle {
             }
         }
         return allCapsCandidate;
+    }
+
+    /**
+     * A workbook names itself on a Guide or cover sheet: the first row's first cell. A workbook
+     * with no such sheet, or a blank first cell, keeps the filename.
+     */
+    private static DocumentTitle coverSheetTitle(
+            List<KnowledgeSourceNode> nodes, KnowledgeSourceNode root) {
+        var sheet = nodes.stream()
+                .filter(node -> root.id().equals(node.parentId()))
+                .filter(node -> node.nodeType() == KnowledgeNodeType.SHEET)
+                .filter(node -> node.sheetName() != null
+                        && COVER_SHEET.matcher(node.sheetName()).matches())
+                .findFirst().orElse(null);
+        if (sheet == null) {
+            return null;
+        }
+        var firstRow = nodes.stream()
+                .filter(node -> node.nodeType() == KnowledgeNodeType.SPREADSHEET_ROW)
+                .filter(node -> sheet.id().equals(node.parentId()))
+                .findFirst().orElse(null);
+        if (firstRow == null) {
+            return null;
+        }
+        return nodes.stream()
+                .filter(node -> node.nodeType() == KnowledgeNodeType.SPREADSHEET_CELL)
+                .filter(node -> firstRow.id().equals(node.parentId()))
+                .filter(node -> Integer.valueOf(0).equals(node.columnIndex()))
+                .findFirst()
+                .map(cell -> titled(cell, cell.text()))
+                .orElse(null);
     }
 
     /**

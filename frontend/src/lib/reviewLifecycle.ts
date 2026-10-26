@@ -105,6 +105,7 @@ export function lifecycleKey(facts: LifecycleFacts): LifecycleKey | null {
   const codes = humanReview.blockers.map((blocker) => blocker.code)
   if (codes.includes('ANALYSIS_NOT_COMPLETE')) return 'incomplete'
   if (codes.includes('ANALYSIS_DEGRADED')) return 'degraded'
+  if (codes.includes('ANALYSIS_PARTIAL')) return 'degraded'
   if (codes.includes('ACTIVE_ESCALATION')) return 'blocked'
   if (humanReview.readyToFinalize) return 'ready'
   if (humanReview.status === 'NOT_STARTED') return 'completed'

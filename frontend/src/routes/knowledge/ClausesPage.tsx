@@ -11,7 +11,7 @@ import { VersionTimeline } from '../../components/knowledge/read/VersionTimeline
 import { Chip } from '../../components/ui/Status'
 import { EmptyState } from '../../components/ui/State'
 import { longDate } from '../../lib/dates'
-import { artifactName, clauseGroups, reviewedText, type Catalog } from '../../lib/knowledgeCatalog'
+import { artifactName, clauseGroupDetail, clauseGroups, reviewedText, type Catalog } from '../../lib/knowledgeCatalog'
 
 type Tab = 'clauses' | 'history'
 const CRUMBS: Crumb[] = [{ label: 'Knowledge', to: '/knowledge' }, { label: 'Clause library' }]
@@ -140,7 +140,7 @@ function Clauses({ catalog, state }: { catalog: Catalog; state: ReturnType<typeo
                     to={`/knowledge/clauses/${encodeURIComponent(group.key)}${isCurrent ? '' : `?publication=${viewing.publication.number}`}`}
                     type="CLAUSE_LIBRARY"
                     title={group.title}
-                    detail={group.variants.map((variant) => variant.candidate.title).join(', ')}
+                    detail={clauseGroupDetail(group, labelFor)}
                     right={`${group.variants.length} ${group.variants.length === 1 ? 'variant' : 'variants'}`}
                   />
                 ))}

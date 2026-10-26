@@ -565,6 +565,14 @@ def volume_line(results):
             f"planted issues found per 10 findings: {per_ten}") if contracts else "- Findings: 0"
 
 
+def missing_line(results):
+    """Missing provisions the review reported as missing, not just credited by a finding on the clause."""
+    contracts = [c for r in results for c in r["contracts"]]
+    issues = [i for c in contracts for i in c["issues"] if i["category"] == "MISSING_PROVISION"]
+    named = sum(c["missingNamed"] for c in contracts)
+    return f"- Missing provisions reported as missing: {pct(named, len(issues))}"
+
+
 def spotting_line(results):
     contracts = [c for r in results for c in r["contracts"]]
     spotted = sum(c.get("spottedFindings", 0) for c in contracts)
@@ -774,6 +782,8 @@ def engine_meta():
             "omissions": os.environ.get("RIVELL_REVIEW_OMISSIONS", "false").lower(),
             "definitions": os.environ.get("RIVELL_REVIEW_DEFINITIONS", "false").lower(),
             "agreedWorseCategory": os.environ.get("RIVELL_REVIEW_AGREED_WORSE_CATEGORY", "true").lower(),
+            "r1NeedsCorroboration": os.environ.get(
+                "RIVELL_REVIEW_R1_NEEDS_CORROBORATION", "false").lower(),
             "withinSplitMargin": os.environ.get("RIVELL_REVIEW_WITHIN_SPLIT_MARGIN", "0.45").lower(),
             "fallbackConditions": os.environ.get("RIVELL_REVIEW_FALLBACK_CONDITIONS", "true").lower()}
 
@@ -791,6 +801,7 @@ def header_lines(meta):
             + (" · omissions on" if meta.get("omissions") == "true" else "")
             + (" · definitions on" if meta.get("definitions") == "true" else "")
             + (" · P1 off" if meta.get("agreedWorseCategory", "true") == "false" else "")
+            + (" · R1 needs corroboration" if meta.get("r1NeedsCorroboration") == "true" else "")
             + (" · P2 off" if meta.get("withinSplitMargin", "0.45").startswith("-")
                else f" · P2 margin {meta['withinSplitMargin']}"
                if meta.get("withinSplitMargin", "0.45") != "0.45" else "")
@@ -840,6 +851,7 @@ def write_report(out, results, meta):
               f"- False-alarm compliant sections: {pct(tot['fa'], tot['cs'])}"
               f" (MEDIUM/HIGH: {pct(tot['fas'], tot['cs'])})",
               volume_line(results),
+              missing_line(results),
               cost_speed_line(results, meta),
               *spotting_line(results),
               *needs_look_line(results),

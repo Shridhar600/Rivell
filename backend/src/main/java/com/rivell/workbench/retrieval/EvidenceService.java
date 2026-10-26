@@ -238,11 +238,12 @@ public class EvidenceService {
                 java.time.Duration.between(stageStart, clock.instant()).toMillis());
         var sufficiency = sufficiency(policyResolution, draftingResolution,
                 precedentOutcome, currentOutcome, asOfPublication);
-        var policyItems = items(policyResolution, request.organizationId(),
-                AuthorityClass.POLICY, "PUBLISHED_PLAYBOOK_RULE",
-                search == null ? Map.of() : search.lanes());
-        var draftingItems = items(draftingResolution, request.organizationId(),
-                AuthorityClass.APPROVED_DRAFTING, "PUBLISHED_CLAUSE_VARIANT", Map.of());
+        // one unit read for both structured lanes: every item's provenance comes from this map
+        var provenance = provenance(request.organizationId(), policyResolution, draftingResolution);
+        var policyItems = items(policyResolution, AuthorityClass.POLICY, "PUBLISHED_PLAYBOOK_RULE",
+                search == null ? Map.of() : search.lanes(), provenance);
+        var draftingItems = items(draftingResolution, AuthorityClass.APPROVED_DRAFTING,
+                "PUBLISHED_CLAUSE_VARIANT", Map.of(), provenance);
         var warnings = new java.util.ArrayList<String>(extraWarnings);
         warnings.addAll(degradationOf(precedentOutcome, currentOutcome));
         var bundle = new EvidenceBundle(UUID.randomUUID(), request,
@@ -424,8 +425,8 @@ public class EvidenceService {
     }
 
     private List<EvidenceItem> items(StructuredPolicyResolver.Resolution resolution,
-            UUID organizationId, AuthorityClass authority, String sourceType,
-            Map<UUID, LaneInfo> lanes) {
+            AuthorityClass authority, String sourceType,
+            Map<UUID, LaneInfo> lanes, Map<UUID, List<String>> provenance) {
         var matches = new java.util.ArrayList<com.rivell.workbench.knowledge.PublishedCandidate>(
                 resolution.published());
         if (authority == AuthorityClass.APPROVED_DRAFTING) {
@@ -434,8 +435,8 @@ public class EvidenceService {
         }
         var items = new java.util.ArrayList<EvidenceItem>();
         for (var match : matches) {
-            items.add(item(match, organizationId, authority, sourceType,
-                    lanes.get(match.candidate().id())));
+            items.add(item(match, authority, sourceType,
+                    lanes.get(match.candidate().id()), provenance));
         }
         return List.copyOf(items);
     }
@@ -451,7 +452,8 @@ public class EvidenceService {
 
     private EvidenceItem item(
             com.rivell.workbench.knowledge.PublishedCandidate match,
-            UUID organizationId, AuthorityClass authority, String sourceType, LaneInfo lanes) {
+            AuthorityClass authority, String sourceType, LaneInfo lanes,
+            Map<UUID, List<String>> provenance) {
         var candidate = match.candidate();
         return new EvidenceItem(
                 UUID.randomUUID(),
@@ -471,7 +473,7 @@ public class EvidenceService {
                 lanes == null ? LaneInfo.NONE : lanes,
                 null,
                 PolicyCompatibility.NOT_ASSESSED,
-                provenance(organizationId, candidate),
+                provenance.getOrDefault(candidate.extractionUnitId(), List.of()),
                 match.publicationId(),
                 match.publicationNumber(),
                 authority == AuthorityClass.APPROVED_DRAFTING
@@ -508,12 +510,16 @@ public class EvidenceService {
                 candidate.effectiveAuthorityConflicts());
     }
 
-    private List<String> provenance(UUID organizationId,
-            com.rivell.workbench.knowledge.KnowledgeCandidate candidate) {
-        return knowledgeQueries.findUnitForOrganization(
-                        organizationId, candidate.extractionUnitId())
-                .map(com.rivell.workbench.knowledge.ExtractionUnit::sourceNodeIds)
-                .map(ids -> ids.stream().map(UUID::toString).toList())
-                .orElse(List.of());
+    /**
+     * Source nodes per extraction unit for the units the structured lanes cite, read in one query.
+     * A unit the organization cannot see is left out, so its item carries no provenance.
+     */
+    private Map<UUID, List<String>> provenance(UUID organizationId,
+            StructuredPolicyResolver.Resolution... resolutions) {
+        var unitIds = new java.util.LinkedHashSet<UUID>();
+        for (var resolution : resolutions) {
+            resolution.candidates().forEach(candidate -> unitIds.add(candidate.extractionUnitId()));
+        }
+        return knowledgeQueries.sourceNodeIdsForUnits(organizationId, unitIds);
     }
 }

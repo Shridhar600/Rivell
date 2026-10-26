@@ -27,10 +27,6 @@ final class ClauseDefinitions {
         this.evidenceIds = evidenceIds;
     }
 
-    static ClauseDefinitions empty() {
-        return new ClauseDefinitions(List.of(), List.of(), List.of());
-    }
-
     static ClauseDefinitions of(EvidenceBundle bundle) {
         var items = bundle.currentContractItems().stream()
                 .filter(item -> DEFINED_TERM.equals(item.retrievalReason()))

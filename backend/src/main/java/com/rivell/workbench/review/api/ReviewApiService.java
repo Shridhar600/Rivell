@@ -65,7 +65,8 @@ public class ReviewApiService {
 
     private static final int DEFAULT_PAGE_LIMIT = 20;
     private static final int MAX_PAGE_LIMIT = 100;
-    private static final int MAX_ANALYSIS_WARNINGS = 20;
+    /** Enough for a full plan (presence, clause, cross-clause and absence checks) to stay visible. */
+    private static final int MAX_ANALYSIS_WARNINGS = 24;
 
     private final ReviewService reviewService;
     private final ReviewAnalysisService analysisService;
@@ -454,7 +455,12 @@ public class ReviewApiService {
                 review.startedAt(),
                 review.completedAt(),
                 activeRun.map(run -> new ReviewRunView(
-                        run.id(), run.runNumber(), run.status().name())).orElse(null),
+                        run.id(), run.runNumber(), run.status().name(),
+                        run.playbookCoverage() == null
+                                ? null
+                                : run.playbookCoverage().entries().stream()
+                                        .map(PlaybookCoverageEntryView::from)
+                                        .toList())).orElse(null),
                 latestRunStatus,
                 progress.plannedChecks(),
                 progress.completedChecks(),
@@ -691,6 +697,7 @@ public class ReviewApiService {
                 finding.severity(), finding.reviewClassification(), finding.proposedAction(),
                 finding.proposedLanguageSource(),
                 Boolean.TRUE.equals(finding.quality().get("secondaryTopic")),
+                "PARTIAL".equals(finding.quality().get("fallbackConditionsOutcome")),
                 finding.quality().get("route") instanceof String route ? route : null,
                 finding.createdAt(), addedBy(finding),
                 firstReviewCategory(finding), positionLabel(finding));

@@ -381,6 +381,11 @@ class KnowledgeReviewConcurrencyIT {
         }
 
         @Override
+        public List<KnowledgeArtifact> listArtifactsForMigration() {
+            return delegate.listArtifactsForMigration();
+        }
+
+        @Override
         public Optional<KnowledgeSource> findSource(UUID artifactId, UUID organizationId) {
             return delegate.findSource(artifactId, organizationId);
         }
@@ -413,6 +418,11 @@ class KnowledgeReviewConcurrencyIT {
         @Override
         public Optional<ExtractionUnit> findUnit(UUID unitId, UUID organizationId) {
             return delegate.findUnit(unitId, organizationId);
+        }
+
+        @Override
+        public List<ExtractionUnit> findUnits(Set<UUID> unitIds, UUID organizationId) {
+            return delegate.findUnits(unitIds, organizationId);
         }
 
         @Override
@@ -469,6 +479,17 @@ class KnowledgeReviewConcurrencyIT {
         @Override
         public List<PublishedCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query) {
             return delegate.findPublishedCandidatesAsOf(query);
+        }
+
+        @Override
+        public List<PublishedCandidate> findPublishedPositionsForArtifacts(
+                UUID organizationId, long asOfPublicationNumber,
+                java.util.Collection<UUID> artifactIds, String contractPackKey,
+                String partyPerspective, String paperSource, String jurisdiction,
+                java.time.LocalDate effectiveOn) {
+            return delegate.findPublishedPositionsForArtifacts(organizationId,
+                    asOfPublicationNumber, artifactIds, contractPackKey, partyPerspective,
+                    paperSource, jurisdiction, effectiveOn);
         }
 
         @Override

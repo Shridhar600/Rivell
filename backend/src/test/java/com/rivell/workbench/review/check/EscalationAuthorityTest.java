@@ -26,7 +26,7 @@ import com.rivell.workbench.retrieval.EvidenceItem;
 /**
  * Council §A.3: an approval exists only when a typed rule covers the finding's stance. A
  * trigger text alone never makes one, a within-fallback note escalates only when the rule says
- * the fallback needs it, and the rule's own condition is what the "Escalate if" line shows.
+ * the fallback needs it, and the rule's own condition travels as the panel's condition line.
  */
 class EscalationAuthorityTest {
 
@@ -115,6 +115,21 @@ class EscalationAuthorityTest {
                 PolicyComparisonSpecs.BEYOND_FALLBACK);
         assertThat(walkAway.rule().approver()).isEqualTo("General Counsel");
         assertThat(walkAway.stance()).isEqualTo(PositionRole.PROHIBITED);
+    }
+
+    @Test
+    void anUnclearReadingDoesNotBorrowTheWalkAwayRule() {
+        // an unclear reading may be a fallback, not a walk-away. Only a rule that names
+        // the fallback can ask for approval; the walk-away approver is named only for a walk-away.
+        var walkAwayOnly = facts(List.of(rule("Head of Legal",
+                PositionRole.PROHIBITED, null, AuthorityLevel.ENTRY)), List.of(), "Head of Legal");
+        var fallbackRule = facts(List.of(rule("Commercial Manager",
+                PositionRole.FALLBACK, null, AuthorityLevel.MATRIX)), List.of(), null);
+
+        assertThat(EscalationAuthority.decide(walkAwayOnly, PolicyComparisonSpecs.UNCLEAR))
+                .isNull();
+        assertThat(EscalationAuthority.decide(fallbackRule, PolicyComparisonSpecs.UNCLEAR)
+                .rule().approver()).isEqualTo("Commercial Manager");
     }
 
     @Test

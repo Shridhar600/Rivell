@@ -20,6 +20,7 @@ import {
   artifactFormat,
   clauseGroups,
   clauseKey,
+  sharedClauseReferences,
   countNoun,
   publicationsTitle,
   type Catalog,
@@ -99,6 +100,7 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
 
   const target = publishedTarget(source)
   const clauseCount = clauseGroups(catalog.clauseLibrary, catalog.index, labelFor).length
+  const sharedReferences = sharedClauseReferences(catalog.clauseLibrary)
   const declaredTypes = detail.data?.declaredContractTypes
 
   return (
@@ -184,7 +186,7 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
           produced={produced}
           selectedId={selectedId}
           onSelect={select}
-          openTo={(candidate) => openTarget(source, candidate)}
+          openTo={(candidate) => openTarget(source, candidate, sharedReferences)}
           partMarks={partMarks}
         />
       ) : (
@@ -196,12 +198,16 @@ function SourceDetail({ catalog, source, state }: { catalog: Catalog; source: So
   )
 }
 
-function openTarget(source: SourceView, candidate: Candidate): { to: string; label: string } | null {
+function openTarget(
+  source: SourceView,
+  candidate: Candidate,
+  sharedReferences: ReadonlySet<string>,
+): { to: string; label: string } | null {
   if (source.artifact.artifactType === 'PLAYBOOK') {
     return { to: `/knowledge/playbooks/${source.artifact.id}?position=${candidate.id}`, label: 'Open position' }
   }
   if (source.artifact.artifactType === 'CLAUSE_LIBRARY') {
-    return { to: `/knowledge/clauses/${encodeURIComponent(clauseKey(candidate))}?variant=${candidate.id}`, label: 'Open clause' }
+    return { to: `/knowledge/clauses/${encodeURIComponent(clauseKey(candidate, sharedReferences))}?variant=${candidate.id}`, label: 'Open clause' }
   }
   return null
 }
