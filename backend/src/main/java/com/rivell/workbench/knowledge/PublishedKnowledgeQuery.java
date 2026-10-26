@@ -1,5 +1,6 @@
 package com.rivell.workbench.knowledge;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Objects;
 import java.util.Set;
@@ -30,7 +31,14 @@ public record PublishedKnowledgeQuery(
         String paperSource,
         String jurisdiction,
         LocalDate effectiveOn,
-        int limit) {
+        int limit,
+        /**
+         * Keyset cursor for the newest-first order: only rows strictly older than this
+         * {@code (created_at, id)} pair are returned, so a pass can walk a corpus larger than
+         * one page without re-reading the same newest rows.
+         */
+        Instant afterCreatedAt,
+        UUID afterId) {
 
     private static final int DEFAULT_LIMIT = 50;
 
@@ -44,6 +52,32 @@ public record PublishedKnowledgeQuery(
         if (limit < 1) {
             throw new IllegalArgumentException("limit must be positive");
         }
+        if ((afterCreatedAt == null) != (afterId == null)) {
+            throw new IllegalArgumentException(
+                    "a keyset cursor needs both afterCreatedAt and afterId");
+        }
+        if (afterCreatedAt != null && !topicKeys.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "a keyset cursor needs the newest-first order, not topic membership");
+        }
+    }
+
+    /** The same query with a page bound. */
+    public PublishedKnowledgeQuery withLimit(int limit) {
+        return new PublishedKnowledgeQuery(organizationId, asOfPublicationNumber, candidateTypes,
+                legalConceptKey, topicKeys, primaryTopicKey, contractPackKey, contractType,
+                partyPerspective, paperSource, jurisdiction, effectiveOn, limit, afterCreatedAt,
+                afterId);
+    }
+
+    /**
+     * The next page of the newest-first order, strictly older than the given row. Topic
+     * membership has its own order and does not accept a cursor.
+     */
+    public PublishedKnowledgeQuery after(Instant createdAt, UUID id) {
+        return new PublishedKnowledgeQuery(organizationId, asOfPublicationNumber, candidateTypes,
+                legalConceptKey, topicKeys, primaryTopicKey, contractPackKey, contractType,
+                partyPerspective, paperSource, jurisdiction, effectiveOn, limit, createdAt, id);
     }
 
     public static PublishedKnowledgeQuery unpublishedNever(
@@ -53,7 +87,7 @@ public record PublishedKnowledgeQuery(
             LocalDate effectiveOn) {
         return new PublishedKnowledgeQuery(organizationId, asOfPublicationNumber, candidateTypes,
                 legalConceptKey, Set.of(), null, contractPackKey, contractType, partyPerspective,
-                paperSource, jurisdiction, effectiveOn, DEFAULT_LIMIT);
+                paperSource, jurisdiction, effectiveOn, DEFAULT_LIMIT, null, null);
     }
 
     /** Topic-membership resolution for policy comparison (design 6a item 2). */
@@ -64,6 +98,6 @@ public record PublishedKnowledgeQuery(
             String jurisdiction, LocalDate effectiveOn, int limit) {
         return new PublishedKnowledgeQuery(organizationId, asOfPublicationNumber, candidateTypes,
                 null, topicKeys, primaryTopicKey, contractPackKey, contractType, partyPerspective,
-                paperSource, jurisdiction, effectiveOn, limit);
+                paperSource, jurisdiction, effectiveOn, limit, null, null);
     }
 }

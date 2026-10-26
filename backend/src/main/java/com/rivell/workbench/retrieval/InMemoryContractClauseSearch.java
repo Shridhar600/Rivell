@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
+import com.rivell.workbench.intelligence.ClauseEmbeddingCache;
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.intelligence.ProviderRejectedException;
@@ -73,11 +74,11 @@ public final class InMemoryContractClauseSearch implements ContractClauseSearch 
     }
 
     /**
-     * One batch for this side; if the provider rejects the batch, each text is retried alone so a
-     * single bad input does not switch the vector lane off for every clause. A failed input keeps
-     * a null slot (excluded from the lane) and the partial degradation is named. A timeout or an
-     * outage turns the vector lane off at once: one call per text would spend the review's budget
-     * on an endpoint that is not answering.
+     * One batch for this side; if the provider rejects the batch, a bounded number of texts is
+     * retried alone so a single bad input does not switch the vector lane off for every clause.
+     * A failed or unattempted input keeps a null slot (excluded from the lane) and the partial
+     * degradation is named. A timeout or an outage turns the vector lane off at once: one call per
+     * text would spend the review's budget on an endpoint that is not answering.
      */
     private List<float[]> embedEach(List<String> texts, List<String> degradation) {
         try {
@@ -90,7 +91,14 @@ public final class InMemoryContractClauseSearch implements ContractClauseSearch 
             }
             var vectors = new ArrayList<float[]>(texts.size());
             var failed = false;
+            var attempted = 0;
             for (var text : texts) {
+                if (attempted == ClauseEmbeddingCache.MAX_FALLBACK_TEXTS) {
+                    vectors.add(null);
+                    failed = true;
+                    continue;
+                }
+                attempted++;
                 try {
                     vectors.add(embeddingService.embed(List.of(text)).vectors().get(0));
                 } catch (SemanticDecisionException e) {

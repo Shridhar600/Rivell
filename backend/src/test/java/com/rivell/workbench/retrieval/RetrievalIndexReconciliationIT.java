@@ -60,6 +60,9 @@ class RetrievalIndexReconciliationIT {
         registry.add("rivell.intelligence.embeddings.provider", () -> "fake");
         registry.add("rivell.intelligence.embeddings.model", () -> "fake-embedding-model");
         registry.add("rivell.intelligence.embeddings.dimensions", () -> "8");
+        // one page of reconciliation is one batch: a corpus larger than this page must still be
+        // walked to its oldest row within the pass
+        registry.add("rivell.retrieval.reconciliation-batch-size", () -> "50");
     }
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -300,6 +303,42 @@ class RetrievalIndexReconciliationIT {
         assertThat(repository.findIndexedIds(organizationId, positionIds, properties.indexVersion()))
                 .as("healed playbook positions %s", labelsById)
                 .containsAll(positionIds);
+    }
+
+    @Test
+    void aPassReachesTheWholePublishedCorpusNotJustTheNewestPage() {
+        var organizationId = identityProvider.currentIdentity().organizationId();
+        var positions = new java.util.ArrayList<KnowledgeCandidate>();
+        while (positions.size() < 60) {
+            positions.addAll(corpusBuilder.publishAll(organizationId,
+                            M6EvidenceCorpus.Fixture.PC_PLAYBOOK,
+                            M6EvidenceCorpus.msaManifest2026(), null).stream()
+                    .filter(candidate -> candidate.candidateType() == CandidateType.PLAYBOOK_RULE)
+                    .toList());
+        }
+        // the oldest position is older than every row of the first page
+        var oldest = jdbcClient.sql("""
+                        select id from knowledge_candidate
+                        where organization_id = ? and candidate_type = 'PLAYBOOK_RULE'
+                        order by created_at, id
+                        limit 1
+                        """)
+                .param(organizationId)
+                .query(UUID.class)
+                .single();
+        assertThat(positions).extracting(KnowledgeCandidate::id).contains(oldest);
+        var deleted = jdbcClient.sql("""
+                        delete from retrieval_evidence_index
+                        where organization_id = ? and candidate_id = ?
+                        """)
+                .param(organizationId).param(oldest).update();
+        assertThat(deleted).isEqualTo(1);
+
+        var result = reconciliationService.reconcile(properties.reconciliationBatchSize());
+
+        assertThat(result.rowsIndexed()).isEqualTo(1);
+        assertThat(repository.findIndexedIds(organizationId, List.of(oldest),
+                properties.indexVersion())).containsExactly(oldest);
     }
 
     private static String distinctiveWord(String text, List<String> otherTexts) {
