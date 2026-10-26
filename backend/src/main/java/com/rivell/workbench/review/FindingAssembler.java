@@ -152,8 +152,10 @@ public final class FindingAssembler {
                 var text = "Your playbook's walk-away: " + walkAway
                         + (walkAway.endsWith(".") ? "" : ".");
                 if (omission.matchedClause() != null) {
-                    return new Observation("MISSING_POSITION", text + " The closest clause, "
-                            + omission.matchedClause() + ", matches it.");
+                    var clause = omission.matchedClause().strip();
+                    return new Observation("MISSING_POSITION", clause.isEmpty()
+                            ? text + " The closest clause matches it."
+                            : text + " The closest clause, " + clause + ", matches it.");
                 }
                 return new Observation("MISSING_POSITION",
                         text + " Rivell did not find " + omission.label()

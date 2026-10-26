@@ -64,6 +64,8 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
     private static final double REQUIRES_PROVISION = 0.8;
     private static final double ABSENT_RIGHT = 0.8;
     private static final double UNSURE = 0.5;
+    /** How long the matched clause's heading may be when a finding names it. */
+    private static final int MATCHED_CLAUSE_NAME = 80;
     private static final String JEV = "JEV";
     private static final String NEEDS_YOUR_LOOK = "NEEDS_YOUR_LOOK";
     private static final String OMISSION_UNSURE = "omission_unsure";
@@ -304,8 +306,9 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
             for (int index : remaining) {
                 var candidate = matched.get(index);
                 var matchedHeading = walkAwayMatches.get(candidate.id());
-                var headingText = matchedHeading == null ? ""
-                        : context.headingTexts().getOrDefault(matchedHeading, "");
+                var matchedClause = matchedHeading == null ? null
+                        : matchedClauseName(context.headingTexts(), context.runInHeadings(),
+                                matchedHeading);
                 var quality = new LinkedHashMap<String, Object>();
                 quality.put("absenceProbability", absentRights.get(candidate.id()));
                 quality.put("route", JEV);
@@ -317,8 +320,7 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
                 }
                 signals.add(signal(context, candidate, clauses.size(), compared[index],
                         new OmissionPayload(candidate.id(), candidate.label(), clauses.size(),
-                                candidate.walkAway(),
-                                headingText.isBlank() ? null : headingText.strip()),
+                                candidate.walkAway(), matchedClause),
                         WalkAwayAbsenceSpecs.WALK_AWAY_ABSENCE_SPEC,
                         WalkAwayAbsenceSpecs.WALK_AWAY_ABSENCE_VERSION,
                         SignalType.MISSING_REQUIRED_CONCEPT.name() + ":", quality,
@@ -388,6 +390,22 @@ public final class OmissionCheckExecutor implements ReviewCheckExecutor {
         return CheckOutcome.degraded("omission_provider_unavailable", List.of(), detail,
                         applicable.bundle().traceId())
                 .withCitedEvidence(List.of(applicable.bundle()));
+    }
+
+    /**
+     * The matched clause as a finding may name it: the heading part of a run-in heading rather
+     * than its whole paragraph, bounded to a word. Empty when the structure named no heading.
+     */
+    static String matchedClauseName(
+            Map<UUID, String> headingTexts, Map<UUID, String> runInHeadings, UUID headingNodeId) {
+        var heading = runInHeadings.getOrDefault(headingNodeId,
+                headingTexts.getOrDefault(headingNodeId, "")).strip();
+        if (heading.length() <= MATCHED_CLAUSE_NAME) {
+            return heading;
+        }
+        var cut = heading.substring(0, MATCHED_CLAUSE_NAME);
+        var space = cut.lastIndexOf(' ');
+        return (space > 0 ? cut.substring(0, space) : cut).stripTrailing() + "…";
     }
 
     /** The matched pairs as detail JSON: a candidate and the clause heading its walk-away matched. */

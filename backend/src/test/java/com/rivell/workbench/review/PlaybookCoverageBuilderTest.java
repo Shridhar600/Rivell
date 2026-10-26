@@ -124,27 +124,65 @@ class PlaybookCoverageBuilderTest {
     }
 
     @Test
-    void aClauseMatchedToTheWalkAwayIsComparedAsAWalkAwayWithThatClause() {
+    void aClauseMatchedToTheWalkAwayIsComparedOnlyWhenThatFindingWasRaised() {
         var matched = position("Termination for convenience", "T-11", "TERM", Set.of());
         when(knowledge.listPublishedPositionsForArtifacts(
                 any(), anyLong(), anyCollection(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of(matched));
         var absenceCheck = absenceCheck();
-        var absenceExecution = execution(absenceCheck.id(), Map.of(
+        var match = Map.of(
+                "candidateId", matched.candidate().id().toString(),
+                "headingNodeId", HEADING_ID.toString());
+        // the search matched the walk-away on one clause and another clause addressed the position,
+        // so the check emitted no finding for it
+        var addressedElsewhere = execution(absenceCheck.id(), Map.of(
                 "searchedCandidates", List.of(matched.candidate().id().toString()),
-                "addressedBySearch", List.of(),
-                "matchedWalkAwayBySearch", List.of(Map.of(
-                        "candidateId", matched.candidate().id().toString(),
-                        "headingNodeId", HEADING_ID.toString())),
+                "addressedBySearch", List.of(matched.candidate().id().toString()),
+                "matchedWalkAwayBySearch", List.of(match),
                 "searchDegradation", List.of()));
 
-        var coverage = builder.build(snapshot(), List.of(absenceCheck),
-                List.of(absenceExecution), List.of(), List.of());
+        var withoutFinding = builder.build(snapshot(), List.of(absenceCheck),
+                List.of(addressedElsewhere), List.of(), List.of());
 
-        var entry = entry(coverage, matched.candidate().id());
+        var unmatchedEntry = entry(withoutFinding, matched.candidate().id());
+        assertThat(unmatchedEntry.state()).isEqualTo(State.NOT_COMPARED);
+        assertThat(unmatchedEntry.reason()).isEqualTo(Reason.FOUND_NOT_JUDGED);
+        assertThat(unmatchedEntry.verdict()).isNull();
+
+        var signal = walkAwaySignal(matched.candidate().id());
+        var finding = new FindingAssembler().assemble(run(), List.of(signal), NOW).getFirst();
+        var matchedOnly = execution(absenceCheck.id(), Map.of(
+                "searchedCandidates", List.of(matched.candidate().id().toString()),
+                "addressedBySearch", List.of(),
+                "matchedWalkAwayBySearch", List.of(match),
+                "searchDegradation", List.of()));
+        var withFinding = builder.build(snapshot(), List.of(absenceCheck),
+                List.of(matchedOnly), List.of(signal), List.of(finding));
+
+        var entry = entry(withFinding, matched.candidate().id());
         assertThat(entry.state()).isEqualTo(State.COMPARED);
         assertThat(entry.verdict()).isEqualTo(Verdict.WALK_AWAY);
         assertThat(entry.clauseHeadingNodeId()).isEqualTo(HEADING_ID);
+        assertThat(entry.findingId()).isEqualTo(finding.id());
+    }
+
+    private static ReviewAnalysisRun run() {
+        return new ReviewAnalysisRun(RUN_ID, ORGANIZATION_ID, REVIEW_ID, 1,
+                RunStatus.COMPLETED, RunTrigger.INITIAL, "review-pipeline-1",
+                NOW, NOW, null, 0, null, null);
+    }
+
+    private static RawReviewSignal walkAwaySignal(UUID candidateId) {
+        var omission = new OmissionPayload(candidateId, "Termination for convenience", 12,
+                "No termination for convenience", "Term and termination");
+        return new RawReviewSignal(UUID.randomUUID(), ORGANIZATION_ID, REVIEW_ID, RUN_ID,
+                ABSENCE_CHECK_ID, SignalType.MISSING_REQUIRED_CONCEPT,
+                FindingSubjectKind.ABSENCE, null, CoreConcepts.TERM, CoreConcepts.TERM, null,
+                IssueFamily.MISSING_REQUIRED_PROVISION, omission, List.of(UUID.randomUUID()),
+                WalkAwayAbsenceSpecs.WALK_AWAY_ABSENCE_SPEC,
+                WalkAwayAbsenceSpecs.WALK_AWAY_ABSENCE_VERSION, null, null, null, null, null,
+                Map.of("absenceProbability", 0.92, "route", "JEV"),
+                SignalType.MISSING_REQUIRED_CONCEPT.name() + ":" + candidateId, NOW);
     }
 
     private static Entry entry(PlaybookCoverage coverage, UUID candidateId) {

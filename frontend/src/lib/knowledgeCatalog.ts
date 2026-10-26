@@ -189,7 +189,7 @@ export interface ClauseVariant {
 }
 
 export interface ClauseGroup {
-  /** The source clause id when it is unique to one library, else the concept, else the candidate id. Safe to use as a route id. */
+  /** The source clause id when it is unique to one library; a shared one scoped by source; else the concept, else the candidate id. Safe to use as a route id. */
   key: string
   title: string
   conceptKey: string | null
@@ -220,14 +220,16 @@ function clauseVariant(candidate: Candidate): string | null {
 
 export function clauseKey(candidate: Candidate, sharedReferences: ReadonlySet<string> = new Set()): string {
   const reference = clauseReference(candidate)
-  if (reference && !sharedReferences.has(reference)) return reference
+  if (reference) {
+    return sharedReferences.has(reference) ? `${candidate.artifactId}:${reference}` : reference
+  }
   return candidate.effectiveConceptKey ?? `candidate-${candidate.id}`
 }
 
 /**
  * Source clause references that more than one clause library states. A reference identifies a
- * clause only inside its own source, so these fall back to the concept or the candidate id as a
- * group key; the reference itself stays on the variant as its source's display text.
+ * clause only inside its own source, so a shared one is scoped by the source; the reference
+ * itself stays on the variant as its source's display text.
  */
 export function sharedClauseReferences(view: ClauseLibraryView): ReadonlySet<string> {
   const sourcesByReference = new Map<string, Set<string>>()
@@ -254,9 +256,9 @@ export interface ClauseLibraryView {
 
 /**
  * Clauses grouped by the source clause id, so the variants of one source clause stay together;
- * a reference that more than one source states falls back to the legal concept or candidate id,
- * and a variant with no concept is its own clause. As of a publication number; with no
- * number, as of now.
+ * a reference that more than one source states is scoped by the source, a reference-less variant
+ * falls back to the legal concept or candidate id, and a variant with no concept is its own
+ * clause. As of a publication number; with no number, as of now.
  */
 export function clauseGroups(
   view: ClauseLibraryView,

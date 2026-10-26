@@ -74,9 +74,9 @@ public final class PlaybookCoverageBuilder {
                 snapshot.effectiveOn());
         var checksById = new HashMap<UUID, ReviewPlanCheck>();
         planChecks.forEach(check -> checksById.put(check.id(), check));
-        var verdicts = verdictsByCandidate(checksById, executions);
-        var search = searchOutcomes(checksById, executions);
         var links = findingLinks(signals, findings);
+        var verdicts = verdictsByCandidate(checksById, executions, links);
+        var search = searchOutcomes(checksById, executions);
         var entries = new ArrayList<Entry>(positions.size());
         for (var published : positions) {
             var candidate = published.candidate();
@@ -134,7 +134,8 @@ public final class PlaybookCoverageBuilder {
     }
 
     private static Map<UUID, List<CandidateVerdict>> verdictsByCandidate(
-            Map<UUID, ReviewPlanCheck> checksById, List<ReviewCheckExecution> executions) {
+            Map<UUID, ReviewPlanCheck> checksById, List<ReviewCheckExecution> executions,
+            FindingLinks links) {
         var byCandidate = new HashMap<UUID, List<CandidateVerdict>>();
         for (var execution : executions) {
             var check = checksById.get(execution.planCheckId());
@@ -142,7 +143,7 @@ public final class PlaybookCoverageBuilder {
                 continue;
             }
             if (check.mechanism() == CheckMechanism.OMISSION) {
-                addMatchedWalkAway(byCandidate, execution.detail());
+                addMatchedWalkAway(byCandidate, execution, links);
                 continue;
             }
             if (check.mechanism() != CheckMechanism.POLICY_COMPARISON) {
@@ -173,11 +174,15 @@ public final class PlaybookCoverageBuilder {
     /**
      * The pairs the walk-away lane searched, matched to a clause and judged the playbook's own
      * walk-away. The executor keeps them out of "addressed" because they are the finding, so they
-     * are a judged position here, never a clean "not found".
+     * are a judged position here, never a clean "not found". A match only counts when the
+     * completed check emitted its finding: a position the search also addressed, or a run that
+     * degraded, has none, so the row cannot read as a walk-away it never raised.
      */
     private static void addMatchedWalkAway(
-            Map<UUID, List<CandidateVerdict>> byCandidate, Map<String, Object> detail) {
-        if (!(detail.get("matchedWalkAwayBySearch") instanceof List<?> matches)) {
+            Map<UUID, List<CandidateVerdict>> byCandidate, ReviewCheckExecution execution,
+            FindingLinks links) {
+        if (execution.status() != CheckExecutionStatus.COMPLETED
+                || !(execution.detail().get("matchedWalkAwayBySearch") instanceof List<?> matches)) {
             return;
         }
         for (var match : matches) {
@@ -186,7 +191,7 @@ public final class PlaybookCoverageBuilder {
             }
             var candidateId = uuid(entry.get("candidateId"));
             var headingNodeId = uuid(entry.get("headingNodeId"));
-            if (candidateId != null && headingNodeId != null) {
+            if (candidateId != null && headingNodeId != null && links.any(candidateId) != null) {
                 byCandidate.computeIfAbsent(candidateId, key -> new ArrayList<>())
                         .add(new CandidateVerdict(Verdict.WALK_AWAY, headingNodeId));
             }

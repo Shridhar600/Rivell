@@ -164,33 +164,50 @@ describe('catalog', () => {
     )
   })
 
-  it('does not merge equal clause references from two clause libraries', () => {
+  it('scopes a shared clause reference to its library so one source clause stays together', () => {
     const second = artifact({ id: 'cl2', artifactType: 'CLAUSE_LIBRARY', filename: 'Other clauses.xlsx' })
-    const row = (id: string, artifactId: string, concept: string | null) =>
+    const row = (id: string, artifactId: string, concept: string | null, variant: string) =>
       candidate({
         id,
         artifactId,
         candidateType: 'CLAUSE_VARIANT',
         title: `${artifactId} clause ${id}`,
         effectiveConceptKey: concept,
-        payloadColumns: { Ref: '1', Variant: id },
+        payloadColumns: { Ref: '1', Variant: variant },
         payloadFieldRoles: { Ref: 'REFERENCE', Variant: 'VARIANT' },
       })
     const world = buildCatalog({
       artifacts: [cl, second],
-      publications: [publication(1, [{ candidateId: 'cl-a' }, { candidateId: 'cl2-a' }])],
+      publications: [
+        publication(1, [
+          { candidateId: 'cl-preferred' },
+          { candidateId: 'cl-fallback' },
+          { candidateId: 'cl2-a' },
+        ]),
+      ],
       candidates: new Map([
-        ['cl', [row('cl-a', 'cl', 'GOVERNING_LAW')]],
-        ['cl2', [row('cl2-a', 'cl2', null)]],
+        [
+          'cl',
+          [
+            row('cl-preferred', 'cl', 'GOVERNING_LAW', 'Preferred'),
+            row('cl-fallback', 'cl', null, 'Fallback 1'),
+          ],
+        ],
+        ['cl2', [row('cl2-a', 'cl2', null, 'Preferred')]],
       ]),
     })
 
     const groups = clauseGroups(world.clauseLibrary, world.index, humanizeCode)
 
-    // A reference identifies a clause only inside its own source, so it cannot key the group.
-    expect(groups.map((group) => group.key).sort()).toEqual(['GOVERNING_LAW', 'candidate-cl2-a'])
+    // A reference identifies a clause only inside its own source, so a shared one is scoped by it.
+    expect(groups.map((group) => group.key).sort()).toEqual(['cl2:1', 'cl:1'])
+    // Variants of one source clause keep one group, even on different concepts.
+    expect(groups.find((group) => group.key === 'cl:1')?.variants.map((variant) => variant.candidate.id)).toEqual([
+      'cl-preferred',
+      'cl-fallback',
+    ])
     // It stays on the variant as the source's own display text.
-    expect(groups.flatMap((group) => group.variants.map((variant) => variant.candidate.payloadColumns.Ref))).toEqual(['1', '1'])
+    expect(groups.flatMap((group) => group.variants.map((variant) => variant.candidate.payloadColumns.Ref))).toEqual(['1', '1', '1'])
   })
 
   it('reads the clause library as of an older publication', () => {

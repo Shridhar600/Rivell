@@ -8,7 +8,8 @@ import java.util.UUID;
  * lane and the walk-away absence check): the candidate, its label and how many contract clauses
  * were searched for it. {@code walkAway} is the position's walk-away text when the absence check
  * produced the observation, else null; {@code matchedClause} is the heading of the clause the
- * search matched to that walk-away, else null.
+ * search matched to that walk-away, empty when that clause has no readable heading, else null when
+ * no clause matched.
  */
 public record OmissionPayload(UUID candidateId, String label, int searchedClauses, String walkAway,
         String matchedClause) implements SignalPayload {
