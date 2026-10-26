@@ -717,6 +717,15 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 query.partyPerspective(), query.paperSource(), query.jurisdiction(),
                 query.effectiveOn());
         addPinVisibility(conditions, params, query.asOfPublicationNumber());
+        if (query.afterCreatedAt() != null) {
+            // Keyset resume on the same total order as the ORDER BY, bound at full TIMESTAMPTZ
+            // precision: a truncated position would skip rows sharing that millisecond.
+            conditions.add("(c.created_at, c.id) < (cast(:afterCreatedAt as timestamptz),"
+                    + " cast(:afterId as uuid))");
+            params.put("afterCreatedAt",
+                    OffsetDateTime.ofInstant(query.afterCreatedAt(), ZoneOffset.UTC));
+            params.put("afterId", query.afterId().toString());
+        }
         // a candidate has at most one ADD publication (DB-enforced), so this join
         // cannot fan out; it both constrains pin visibility and exposes the
         // publication identity for provenance
