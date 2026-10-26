@@ -26,7 +26,8 @@ import com.rivell.workbench.taxonomy.ConceptKey;
  * alone must keep an older correction's meaning (DW-099: null after an edit means "not
  * specified"). Rows written before this marker existed deserialize with it false, so their
  * correction still falls back to the machine answer. {@code authorityRulesCleared} does the
- * same for the rule list, where an empty list is a deliberate clear.
+ * same for the rule list, where an empty list is a deliberate clear; {@code positionsCleared}
+ * and {@code escalationTriggerCleared} do it for an emptied position set and a blank trigger.
  */
 public record SemanticFields(
         Set<PositionRole> positions,
@@ -43,7 +44,11 @@ public record SemanticFields(
         boolean authorityRulesCleared,
         List<String> unmappedAuthority,
         /** A corrected fallback list was deliberately cleared, not left untouched. */
-        boolean fallbackTextsCleared) {
+        boolean fallbackTextsCleared,
+        /** A corrected position set was deliberately cleared, not left untouched. */
+        boolean positionsCleared,
+        /** A corrected escalation trigger was deliberately blanked, not left untouched. */
+        boolean escalationTriggerCleared) {
 
     public static final SemanticFields EMPTY = new SemanticFields(
             Set.of(), null, null, null, Map.of());
@@ -53,7 +58,22 @@ public record SemanticFields(
             Set<PositionRole> positions, Boolean requiresApproval, String escalationTrigger,
             PositionRole variantRole, Map<ConceptKey, Double> conceptProbabilities) {
         this(positions, requiresApproval, escalationTrigger, variantRole, conceptProbabilities,
-                false, null, List.of(), null, List.of(), List.of(), false, List.of(), false);
+                false, null, List.of(), null, List.of(), List.of(), false, List.of(), false,
+                false, false);
+    }
+
+    /** A correction from before the position and escalation markers existed. */
+    public SemanticFields(
+            Set<PositionRole> positions, Boolean requiresApproval, String escalationTrigger,
+            PositionRole variantRole, Map<ConceptKey, Double> conceptProbabilities,
+            boolean requiresApprovalCleared, String preferredText, List<String> fallbackTexts,
+            String prohibitedText, List<AuthorityRule> authorityRules,
+            List<AuthorityConflict> authorityConflicts, boolean authorityRulesCleared,
+            List<String> unmappedAuthority, boolean fallbackTextsCleared) {
+        this(positions, requiresApproval, escalationTrigger, variantRole, conceptProbabilities,
+                requiresApprovalCleared, preferredText, fallbackTexts, prohibitedText,
+                authorityRules, authorityConflicts, authorityRulesCleared, unmappedAuthority,
+                fallbackTextsCleared, false, false);
     }
 
     public SemanticFields {
@@ -71,10 +91,14 @@ public record SemanticFields(
         authorityRules = authorityRules == null ? List.of() : List.copyOf(authorityRules);
         authorityConflicts = authorityConflicts == null ? List.of() : List.copyOf(authorityConflicts);
         unmappedAuthority = unmappedAuthority == null ? List.of() : List.copyOf(unmappedAuthority);
-        // The marker only has meaning for a null value; a present value is itself the answer.
+        // The marker only has meaning for an empty value; a present value is itself the answer.
         requiresApprovalCleared = requiresApprovalCleared && requiresApproval == null;
         authorityRulesCleared = authorityRulesCleared && authorityRules.isEmpty();
         fallbackTextsCleared = fallbackTextsCleared && fallbackTexts.isEmpty();
+        positionsCleared = positionsCleared && positions.isEmpty();
+        escalationTriggerCleared = escalationTriggerCleared
+                && (escalationTrigger == null || escalationTrigger.isBlank());
+        escalationTrigger = escalationTriggerCleared ? null : escalationTrigger;
     }
 
     /** Marks a corrected playbook approval as deliberately "not specified". */
@@ -82,7 +106,7 @@ public record SemanticFields(
         return new SemanticFields(positions, requiresApproval, escalationTrigger, variantRole,
                 conceptProbabilities, true, preferredText, fallbackTexts, prohibitedText,
                 authorityRules, authorityConflicts, authorityRulesCleared, unmappedAuthority,
-                fallbackTextsCleared);
+                fallbackTextsCleared, positionsCleared, escalationTriggerCleared);
     }
 
     /** Marks a corrected approval rule list as deliberately cleared. */
@@ -90,7 +114,23 @@ public record SemanticFields(
         return new SemanticFields(positions, requiresApproval, escalationTrigger, variantRole,
                 conceptProbabilities, requiresApprovalCleared, preferredText, fallbackTexts,
                 prohibitedText, authorityRules, authorityConflicts, true, unmappedAuthority,
-                fallbackTextsCleared);
+                fallbackTextsCleared, positionsCleared, escalationTriggerCleared);
+    }
+
+    /** Marks a corrected position set as deliberately empty. */
+    public SemanticFields withPositionsCleared() {
+        return new SemanticFields(positions, requiresApproval, escalationTrigger, variantRole,
+                conceptProbabilities, requiresApprovalCleared, preferredText, fallbackTexts,
+                prohibitedText, authorityRules, authorityConflicts, authorityRulesCleared,
+                unmappedAuthority, fallbackTextsCleared, true, escalationTriggerCleared);
+    }
+
+    /** Marks a corrected escalation trigger as deliberately blank. */
+    public SemanticFields withEscalationTriggerCleared() {
+        return new SemanticFields(positions, requiresApproval, escalationTrigger, variantRole,
+                conceptProbabilities, requiresApprovalCleared, preferredText, fallbackTexts,
+                prohibitedText, authorityRules, authorityConflicts, authorityRulesCleared,
+                unmappedAuthority, fallbackTextsCleared, positionsCleared, true);
     }
 
     public PositionRole effectiveVariantRole() {

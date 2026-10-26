@@ -3,6 +3,8 @@ package com.rivell.workbench.knowledge.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -441,6 +443,83 @@ class KnowledgeApiIT {
     }
 
     @Test
+    void aRetriedUploadWithTheSameClientRequestIdReplaysTheStoredArtifact() throws Exception {
+        var clientRequestId = UUID.randomUUID();
+
+        var first = uploadWithClientRequestId(
+                "knowledge-playbook.docx", ArtifactType.PLAYBOOK, clientRequestId);
+        var second = uploadWithClientRequestId(
+                "knowledge-playbook.docx", ArtifactType.PLAYBOOK, clientRequestId);
+
+        assertThat(second.get("id").asText()).isEqualTo(first.get("id").asText());
+        var stored = jdbcClient.sql("""
+                        select count(*) from knowledge_artifact
+                        where organization_id = :organizationId
+                          and client_request_id = :clientRequestId
+                        """)
+                .param("organizationId", identityProvider.currentIdentity().organizationId())
+                .param("clientRequestId", clientRequestId)
+                .query(Long.class).single();
+        assertThat(stored).isEqualTo(1);
+        verify(semanticCompilationService, times(1)).compile(any(), any(), any(), any());
+    }
+
+    @Test
+    void clearingEveryPositionAndTheEscalationTriggerSticksAfterReload() throws Exception {
+        var artifact = upload("knowledge-playbook.docx", ArtifactType.PLAYBOOK,
+                "MSA_PACK", "Customer", "Third-Party", "US", null);
+        var candidates = mockMvc.perform(get("/api/knowledge/artifacts/{id}/candidates",
+                        artifact.get("id").asText()))
+                .andExpect(status().isOk())
+                .andReturn();
+        var candidateArray = objectMapper.readTree(
+                candidates.getResponse().getContentAsString()).get("data");
+        var candidateId = java.util.stream.StreamSupport
+                .stream(candidateArray.spliterator(), false)
+                .filter(node -> "PLAYBOOK_RULE".equals(node.get("candidateType").asText()))
+                .findFirst()
+                .orElseThrow()
+                .get("id").asText();
+        // This environment has no model provider, so the compile leaves the machine reading
+        // empty. Seed the values a compile would have stored and clear those.
+        jdbcClient.sql("""
+                        update knowledge_candidate
+                        set semantic_fields = jsonb_set(
+                                jsonb_set(semantic_fields, '{positions}', '["PREFERRED"]'::jsonb),
+                                '{escalationTrigger}', '"Escalate to GC"'::jsonb)
+                        where id = :id
+                        """)
+                .param("id", UUID.fromString(candidateId))
+                .update();
+        var seeded = mockMvc.perform(get("/api/knowledge/candidates/{id}", candidateId))
+                .andExpect(status().isOk())
+                .andReturn();
+        var machine = objectMapper.readTree(
+                seeded.getResponse().getContentAsString()).get("data");
+        assertThat(machine.get("positions")).isNotEmpty();
+        assertThat(machine.get("escalationTrigger").asText()).isEqualTo("Escalate to GC");
+
+        mockMvc.perform(post("/api/knowledge/candidates/{id}/edit", candidateId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"semanticFields":{"positions":[],"escalationTrigger":""}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.positions").isEmpty())
+                .andExpect(jsonPath("$.data.escalationTrigger").doesNotExist());
+
+        var reloaded = mockMvc.perform(get("/api/knowledge/candidates/{id}", candidateId))
+                .andExpect(status().isOk())
+                .andReturn();
+        var stored = objectMapper.readTree(reloaded.getResponse().getContentAsString()).get("data");
+        assertThat(stored.get("positions").isEmpty()).isTrue();
+        assertThat(stored.path("escalationTrigger").isNull()).isTrue();
+        var correctedFields = new ArrayList<String>();
+        stored.get("correctedFields").forEach(field -> correctedFields.add(field.asText()));
+        assertThat(correctedFields).containsExactlyInAnyOrder("positions", "escalationTrigger");
+    }
+
+    @Test
     void clearingCounselApprovalToNotSpecifiedSticksAfterReload() throws Exception {
         var artifact = upload("knowledge-playbook.docx", ArtifactType.PLAYBOOK,
                 "MSA_PACK", "Customer", "Third-Party", "US", null);
@@ -559,17 +638,34 @@ class KnowledgeApiIT {
                 paperSource, jurisdiction, declaredContractTypes, null, null);
     }
 
+    private JsonNode uploadWithClientRequestId(
+            String fixture, ArtifactType artifactType, UUID clientRequestId) throws Exception {
+        var request = multipart("/api/knowledge/artifacts")
+                .file(new MockMultipartFile("file", fixture, guessMediaType(fixture),
+                        fixtureBytes(fixture)))
+                .param("artifactType", artifactType.name())
+                .param("clientRequestId", clientRequestId.toString());
+        var result = mockMvc.perform(request)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").isString())
+                .andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("data");
+    }
+
+    private byte[] fixtureBytes(String fixture) throws Exception {
+        try (var stream = getClass().getClassLoader()
+                .getResourceAsStream("fixtures/" + fixture)) {
+            assertThat(stream).as("classpath resource %s", fixture).isNotNull();
+            return stream.readAllBytes();
+        }
+    }
+
     private JsonNode uploadWithPeriod(
             String fixture, ArtifactType artifactType, String contractPackKey,
             String partyPerspective, String paperSource, String jurisdiction,
             String declaredContractTypes, LocalDate effectiveFrom, LocalDate effectiveTo)
             throws Exception {
-        byte[] bytes;
-        try (var stream = getClass().getClassLoader()
-                .getResourceAsStream("fixtures/" + fixture)) {
-            assertThat(stream).as("classpath resource %s", fixture).isNotNull();
-            bytes = stream.readAllBytes();
-        }
+        var bytes = fixtureBytes(fixture);
         var request = multipart("/api/knowledge/artifacts")
                 .file(new MockMultipartFile("file", fixture, guessMediaType(fixture), bytes))
                 .param("artifactType", artifactType.name());

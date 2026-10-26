@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import {
   useMutation,
   useQuery,
@@ -5,6 +6,7 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query'
+import { newRequestId } from '../lib/requestId'
 import { createApiClient } from './client'
 import {
   MALFORMED_RESPONSE_MESSAGE,
@@ -973,13 +975,16 @@ function manifestQuery(
 export async function uploadKnowledge(
   file: File,
   manifest: ArtifactManifestInput,
+  clientRequestId?: string | null,
 ): Promise<ArtifactDetail> {
   const client = createApiClient()
   const formData = new FormData()
   formData.append('file', file)
+  const query = manifestQuery(manifest)
+  if (clientRequestId) query.clientRequestId = clientRequestId
 
   const { data, response } = await client.POST('/api/knowledge/artifacts', {
-    params: { query: manifestQuery(manifest) },
+    params: { query },
     body: { file: file.name },
     bodySerializer: () => formData,
   })
@@ -1263,15 +1268,33 @@ export interface UploadKnowledgeVariables {
   manifest: ArtifactManifestInput
 }
 
+export interface UploadRequestKey {
+  signature: string
+  id: string | null
+}
+
+/** One key per unchanged upload: the same file and manifest keep it, a changed upload gets a new one. */
+export function uploadRequestKey(
+  current: UploadRequestKey | null,
+  file: File,
+  manifest: ArtifactManifestInput,
+): UploadRequestKey {
+  const signature = `${file.name}:${file.size}:${file.lastModified}:${JSON.stringify(manifest)}`
+  return current?.signature === signature ? current : { signature, id: newRequestId() }
+}
+
 export function useUploadKnowledge(): UseMutationResult<
   ArtifactDetail,
   Error,
   UploadKnowledgeVariables
 > {
   const queryClient = useQueryClient()
+  const request = useRef<UploadRequestKey | null>(null)
   return useMutation({
-    mutationFn: ({ file, manifest }: UploadKnowledgeVariables) =>
-      uploadKnowledge(file, manifest),
+    mutationFn: ({ file, manifest }: UploadKnowledgeVariables) => {
+      request.current = uploadRequestKey(request.current, file, manifest)
+      return uploadKnowledge(file, manifest, request.current.id)
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: knowledgeKeys.artifacts })
     },

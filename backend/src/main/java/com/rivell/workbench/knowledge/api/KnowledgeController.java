@@ -89,7 +89,9 @@ class KnowledgeController {
     @Operation(summary = "Upload a legal knowledge source with its human-declared manifest",
             description = "declaredContractTypes is optional. When it is empty or omitted, the "
                     + "source applies to every contract type; the API does not reject an empty "
-                    + "declaration, because existing clients and the evaluation runner rely on it.")
+                    + "declaration, because existing clients and the evaluation runner rely on it. "
+                    + "clientRequestId is optional: repeating an upload with the same key returns "
+                    + "the artifact the first attempt stored.")
     @ResponseStatus(HttpStatus.OK)
     @ApiResponses({
             @ApiResponse(
@@ -114,7 +116,8 @@ class KnowledgeController {
             @RequestParam(required = false) String language,
             @RequestParam(required = false) LocalDate effectiveFrom,
             @RequestParam(required = false) LocalDate effectiveTo,
-            @RequestParam(required = false) String note) throws IOException {
+            @RequestParam(required = false) String note,
+            @RequestParam(required = false) UUID clientRequestId) throws IOException {
         try (var stream = file.getInputStream()) {
             var artifact = ingestionService.ingest(
                     file.getOriginalFilename(),
@@ -130,7 +133,8 @@ class KnowledgeController {
                             effectiveFrom,
                             effectiveTo,
                             note),
-                    stream);
+                    stream,
+                    clientRequestId);
             return ApiResult.ok(toDetail(artifact));
         }
     }
@@ -316,7 +320,11 @@ class KnowledgeController {
                                 && request.semanticFields().authorityRules().isEmpty(),
                         java.util.List.of(),
                         request.semanticFields().fallbackTexts() != null
-                                && request.semanticFields().fallbackTexts().isEmpty()),
+                                && request.semanticFields().fallbackTexts().isEmpty(),
+                        request.semanticFields().positions() != null
+                                && request.semanticFields().positions().isEmpty(),
+                        request.semanticFields().escalationTrigger() != null
+                                && request.semanticFields().escalationTrigger().isBlank()),
                 request.note())));
     }
 

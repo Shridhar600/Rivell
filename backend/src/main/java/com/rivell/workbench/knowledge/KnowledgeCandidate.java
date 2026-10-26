@@ -285,9 +285,15 @@ public record KnowledgeCandidate(
     }
 
     public Set<PositionRole> effectivePositions() {
-        return editedSemanticFields != null && !editedSemanticFields.positions().isEmpty()
-                ? editedSemanticFields.positions()
-                : semanticFields.positions();
+        if (editedSemanticFields != null) {
+            if (!editedSemanticFields.positions().isEmpty()) {
+                return editedSemanticFields.positions();
+            }
+            if (editedSemanticFields.positionsCleared()) {
+                return Set.of();
+            }
+        }
+        return semanticFields.positions();
     }
 
     public PositionRole effectiveVariantRole() {
@@ -297,9 +303,15 @@ public record KnowledgeCandidate(
     }
 
     public String effectiveEscalationTrigger() {
-        return editedSemanticFields != null && editedSemanticFields.escalationTrigger() != null
-                ? editedSemanticFields.escalationTrigger()
-                : semanticFields.escalationTrigger();
+        if (editedSemanticFields != null) {
+            if (editedSemanticFields.escalationTrigger() != null) {
+                return editedSemanticFields.escalationTrigger();
+            }
+            if (editedSemanticFields.escalationTriggerCleared()) {
+                return null;
+            }
+        }
+        return semanticFields.escalationTrigger();
     }
 
     public Boolean effectiveRequiresApproval() {
@@ -439,15 +451,19 @@ public record KnowledgeCandidate(
         }
         var edited = editedSemanticFields;
         var fields = new java.util.LinkedHashSet<String>();
-        if (!edited.positions().isEmpty() && !edited.positions().equals(semanticFields.positions())) {
+        if ((!edited.positions().isEmpty() || edited.positionsCleared())
+                && !edited.positions().equals(semanticFields.positions())) {
             fields.add("positions");
         }
         if (edited.variantRole() != null
                 && edited.variantRole() != semanticFields.effectiveVariantRole()) {
             fields.add("variantRole");
         }
-        if (edited.escalationTrigger() != null
-                && !edited.escalationTrigger().equals(semanticFields.escalationTrigger())) {
+        if ((edited.escalationTrigger() != null
+                        && !edited.escalationTrigger().equals(semanticFields.escalationTrigger()))
+                || (edited.escalationTriggerCleared()
+                        && semanticFields.escalationTrigger() != null
+                        && !semanticFields.escalationTrigger().isBlank())) {
             fields.add("escalationTrigger");
         }
         if ((edited.requiresApproval() != null
