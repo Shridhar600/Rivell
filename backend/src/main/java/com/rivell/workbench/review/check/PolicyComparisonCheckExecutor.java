@@ -104,18 +104,23 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
         this.evidenceService = evidenceService;
         this.conceptRegistry = conceptRegistry;
         this.properties = properties;
-        this.spotter = new ContractIssueSpotter(reasoningService, evidenceService);
+        this.spotter = new ContractIssueSpotter(reasoningService, evidenceService,
+                engineProperties.retainedRuns());
         this.routing = engineProperties.routing();
         this.definitionsEnabled = engineProperties.definitions();
         this.adjudicator = new LlmAdjudicator(reasoningService);
-        this.budget = new AdjudicationBudget(routing.maxAdjudications());
+        this.budget = new AdjudicationBudget(
+                routing.maxAdjudications(), engineProperties.retainedRuns());
         this.agreedWorseCategory = engineProperties.severity().agreedWorseCategory();
         this.r1NeedsCorroboration = engineProperties.severity().r1NeedsCorroboration();
         this.fallbackConditionsEnabled = engineProperties.fallbackConditions().enabled();
         this.maxConditionChecks = engineProperties.fallbackConditions().maxChecks();
-        this.splitBudget = new AdjudicationBudget(routing.maxAdjudications());
+        this.splitBudget = new AdjudicationBudget(
+                routing.maxAdjudications(), engineProperties.retainedRuns());
         this.conditionChecker = new FallbackConditionChecker(reasoningService);
-        this.conditionBudget = new AdjudicationBudget(engineProperties.fallbackConditions().maxChecks());
+        this.conditionBudget = new AdjudicationBudget(
+                engineProperties.fallbackConditions().maxChecks(),
+                engineProperties.retainedRuns());
         this.fitCheck = new ClauseFitCheck(decisionService);
     }
 

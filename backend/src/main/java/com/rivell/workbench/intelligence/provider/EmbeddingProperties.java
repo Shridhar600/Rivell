@@ -62,6 +62,18 @@ public record EmbeddingProperties(
         }
     }
 
+    @Override
+    public String toString() {
+        return "EmbeddingProperties[provider=" + provider
+                + ", baseUrl=" + baseUrl
+                + ", apiKey=" + (apiKey == null || apiKey.isBlank() ? "<absent>" : "<redacted>")
+                + ", model=" + model
+                + ", dimensions=" + dimensions
+                + ", maxInputsPerBatch=" + maxInputsPerBatch
+                + ", connectTimeout=" + connectTimeout
+                + ", readTimeout=" + readTimeout + "]";
+    }
+
     public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();
     }

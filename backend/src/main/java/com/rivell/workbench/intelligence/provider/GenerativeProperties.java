@@ -111,6 +111,20 @@ public record GenerativeProperties(
                 connectTimeout, readTimeout, null, null);
     }
 
+    @Override
+    public String toString() {
+        return "GenerativeProperties[provider=" + provider
+                + ", baseUrl=" + baseUrl
+                + ", apiKey=" + (apiKey == null || apiKey.isBlank() ? "<absent>" : "<redacted>")
+                + ", model=" + model
+                + ", responseMode=" + responseMode
+                + ", temperature=" + temperature
+                + ", connectTimeout=" + connectTimeout
+                + ", readTimeout=" + readTimeout
+                + ", longReadTimeout=" + longReadTimeout
+                + ", reasoning=" + reasoning + "]";
+    }
+
     public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();
     }
