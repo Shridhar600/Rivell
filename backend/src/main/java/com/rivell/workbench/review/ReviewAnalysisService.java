@@ -434,7 +434,6 @@ public class ReviewAnalysisService {
                                 outcome.detail(), outcome.signals().size(), clock.instant())) {
                             throw new LeaseLostException(execution.id());
                         }
-                        findingRepository.deleteFindings(review.organizationId(), run.id());
                         analysisRepository.deleteSignals(
                                 review.organizationId(), run.id(), check.id());
                         analysisRepository.insertSignals(outcome.signals());

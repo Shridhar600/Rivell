@@ -20,9 +20,6 @@ public interface FindingRepository {
      */
     void addFinding(Finding finding);
 
-    /** Deletes a run's findings (derived state) when its checks are re-executed. */
-    void deleteFindings(UUID organizationId, UUID runId);
-
     List<Finding> findFindings(UUID organizationId, UUID runId);
 
     /**
