@@ -236,7 +236,7 @@ class PositionSearchIT {
                 noTopicRequest(organizationId, LIABILITY_CLAUSE), Set.of(),
                 Set.copyOf(liability.topicKeys()), 10);
 
-        // DW-085: excluding the topic a person removed takes its positions out of the candidates
+        // excluding the topic a person removed takes its positions out of the candidates
         assertThat(foundIds(bundle)).isNotEmpty().doesNotContain(liability.id());
     }
 

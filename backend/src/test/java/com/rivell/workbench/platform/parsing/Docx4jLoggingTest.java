@@ -20,7 +20,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
 /**
- * DW-087: a package with no relationship to a styles part made docx4j log "Package field null
+ * A package with no relationship to a styles part made docx4j log "Package field null
  * for this Part ... StyleDefinitionsPart" at ERROR on every parse, though nothing failed.
  */
 class Docx4jLoggingTest {

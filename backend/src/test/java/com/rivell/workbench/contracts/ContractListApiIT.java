@@ -41,7 +41,7 @@ import com.rivell.workbench.contracts.ReviewProfile;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * Behaviour of the contract enumeration added for Home (GAP-F).
+ * Behaviour of the contract enumeration added for Home.
  *
  * <p>There was previously no bare {@code GET /api/contracts} at all, so a user could not
  * find a contract they had uploaded. These tests pin the enumeration, its tenant scope,

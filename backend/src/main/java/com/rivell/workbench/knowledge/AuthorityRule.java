@@ -4,7 +4,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * One typed approval rule (council §A.1): who approves, which stances it governs, an optional
+ * One typed approval rule: who approves, which stances it governs, an optional
  * condition, where the statement came from, and the source words it rests on. A rule always
  * names an approver: a bare trigger text is not a rule, so it can never make an approval.
  *

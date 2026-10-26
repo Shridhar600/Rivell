@@ -10,8 +10,8 @@ public record ErrorResponse(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String title,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String detail,
         /**
-         * A typed failure code, when the error carries one the client can act on (DW-037 /
-         * RED-SRC). Null, and absent from the body, for every error without one.
+         * A typed failure code, when the error carries one the client can act on. Null, and absent
+         * from the body, for every error without one.
          */
         @Schema(description = "Typed failure code, when the error carries one; absent otherwise")
         @JsonInclude(JsonInclude.Include.NON_NULL) String failureCode) {

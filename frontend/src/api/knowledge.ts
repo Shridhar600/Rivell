@@ -730,8 +730,8 @@ const KNOWLEDGE_MESSAGES: Partial<Record<number, string>> = {
 
 /**
  * Bounded so Home and the legacy lists cannot request an unbounded page. The backend caps both
- * knowledge lists at 100. Neither list has a cursor yet, so a page is not the whole set; the
- * remaining GAP-C items are recorded in DEFERRED_WORK.md.
+ * knowledge lists at 100. Neither list has a cursor yet, so a page is not the whole set;
+ * reading past the first page is not supported yet.
  */
 export const KNOWLEDGE_PAGE_LIMIT = 20
 

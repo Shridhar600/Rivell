@@ -8,7 +8,7 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * Council §A.1-A.2: the most specific typed rule wins for one stance, and a lower level that
+ * The most specific typed rule wins for one stance, and a lower level that
  * names a different approver is kept as a visible conflict rather than hidden. A stance with
  * no rule behind it has no approval at all.
  */
@@ -29,7 +29,7 @@ class AuthorityCatalogTest {
 
         var effective = catalog.merge("Limitation of liability", "", List.of(entry));
 
-        // council §A.1: an approver stated on the entry beats the approval matrix
+        // an approver stated on the entry beats the approval matrix
         assertThat(effective.rule(PositionRole.FALLBACK).approver())
                 .isEqualTo("General Counsel");
         assertThat(effective.rule(PositionRole.PROHIBITED).approver())
@@ -58,7 +58,7 @@ class AuthorityCatalogTest {
 
         assertThat(effective.rule(PositionRole.PROHIBITED).condition())
                 .isEqualTo("Any deviation from a walk-away");
-        // both same-approver conditions survive as separate rules (council §E)
+        // both same-approver conditions survive as separate rules
         assertThat(effective.rules()).extracting(AuthorityRule::condition)
                 .containsExactly("Any deviation from a walk-away", null);
     }

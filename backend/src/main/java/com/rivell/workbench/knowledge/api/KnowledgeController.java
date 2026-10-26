@@ -248,7 +248,7 @@ class KnowledgeController {
         return ApiResult.ok(toCandidateView(queryService.getCandidate(id)));
     }
 
-    /** Human concept correction before publication (DW-017): set or clear. */
+    /** Human concept correction before publication: set or clear. */
     @Operation(summary = "Correct or clear a candidate's concept (machine proposal preserved)")
     @ResponseStatus(HttpStatus.OK)
     @ApiResponses({

@@ -65,7 +65,7 @@ public class ContractIngestionService {
     }
 
     /**
-     * The document-work slot is taken before the bytes are read, stored or recorded (DW-095). A
+     * The document-work slot is taken before the bytes are read, stored or recorded. A
      * busy limit therefore refuses the upload before any contract row or file exists; nothing is
      * left behind for every rejected request.
      */

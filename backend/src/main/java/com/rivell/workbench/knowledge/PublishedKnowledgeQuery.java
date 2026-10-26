@@ -7,8 +7,8 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Bounded retrieval query over published knowledge (Architecture Decision #8.1,
- * DW-010). Request-side scope dimensions come from the human-declared review profile;
+ * Bounded retrieval query over published knowledge (Architecture Decision #8.1).
+ * Request-side scope dimensions come from the human-declared review profile;
  * knowledge rows with absent dimensions are wildcards; both-present dimensions must
  * match exactly. Results are limited to candidates visible at the pinned publication
  * number (supersession-aware). Never hydrates the whole published set.

@@ -28,7 +28,7 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * Reconciliation flow (DW-012): a published precedent whose derived index rows were
+ * Reconciliation flow: a published precedent whose derived index rows were
  * lost is honestly reported (INDEX_INCOMPLETE / PARTIAL), healed by one bounded
  * reconciliation pass (lexical + embedding restored), then discovered normally.
  * A second pass is a no-op (no duplicate rows), and another organization's index

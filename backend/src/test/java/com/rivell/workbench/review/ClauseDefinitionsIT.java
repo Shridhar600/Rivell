@@ -304,7 +304,7 @@ class ClauseDefinitionsIT {
 
     @Test
     void aSearchFoundFindingCitesTheDefinitionsOfItsOwnSearchBundle() throws Exception {
-        // DW-075: the aggregate-cap clause gets no topic, so only the position search can pair a
+        // the aggregate-cap clause gets no topic, so only the position search can pair a
         // rule with it; the search bundle's current-contract lane must carry the defined term, and
         // the finding must cite it. A change that stops running that lane for the search route
         // fails here.

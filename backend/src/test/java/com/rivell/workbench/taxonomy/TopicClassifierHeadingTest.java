@@ -24,7 +24,7 @@ import com.rivell.workbench.intelligence.TokenUsage;
 import com.rivell.workbench.intelligence.YesNoAnswer;
 
 /**
- * DW-098: a heading that names exactly one of the topics the classifier passed is carried as
+ * A heading that names exactly one of the topics the classifier passed is carried as
  * the heading topic. It never becomes the primary: the model's own choice, or no primary when
  * the model gave none, stays the primary.
  */

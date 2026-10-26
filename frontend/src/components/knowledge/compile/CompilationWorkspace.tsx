@@ -67,7 +67,7 @@ export function CompilationWorkspace({ artifact }: { artifact: ArtifactDetail })
   const candidates = useMemo(() => candidatesQuery.data ?? [], [candidatesQuery.data])
   const units = unitsQuery.data
   // Titles for the published candidates this draft was compared with. One map is loaded in one
-  // place for the whole workspace, so no row issues its own candidate read (DW-043).
+  // place for the whole workspace, so no row issues its own candidate read.
   const peerIds = useMemo(() => {
     const ids = new Set<string>()
     for (const entry of candidates) {

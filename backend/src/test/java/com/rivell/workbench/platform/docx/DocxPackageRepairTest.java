@@ -143,7 +143,7 @@ class DocxPackageRepairTest {
     }
 
     /**
-     * DW-083: an intact package passes through without a copy of its parts. A 24 MB part
+     * An intact package passes through without a copy of its parts. A 24 MB part
      * compresses to a few kilobytes, so reading it into memory is what the allocation counter
      * would show.
      */

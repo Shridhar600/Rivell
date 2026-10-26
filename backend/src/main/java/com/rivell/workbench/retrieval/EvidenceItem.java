@@ -93,7 +93,7 @@ public record EvidenceItem(
      * Typed facts of a published playbook rule: position roles, approval requirement,
      * escalation trigger, the role-tagged field values a comparison question asks from, and
      * the typed approval rules the playbook states. A finding escalates only when one of
-     * these rules covers the finding's stance (council §A.3).
+     * these rules covers the finding's stance.
      */
     public record PolicyFacts(
             Set<PositionRole> positions,

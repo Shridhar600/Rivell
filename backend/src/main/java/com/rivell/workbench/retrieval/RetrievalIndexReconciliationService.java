@@ -10,7 +10,7 @@ import com.rivell.workbench.knowledge.KnowledgeQueryService;
 import com.rivell.workbench.knowledge.PublishedKnowledgeQuery;
 
 /**
- * Index reconciliation (DW-012, retrieval-owned): discover published, indexable
+ * Index reconciliation (retrieval-owned): discover published, indexable
  * evidence that should exist in the CURRENT index/model version but has no index
  * row or has one without a persisted vector, and heal it in bounded batches.
  * Idempotent by construction (upsert
@@ -101,7 +101,7 @@ public class RetrievalIndexReconciliationService {
                             missing.add(match);
                         } else if (embeddingsConfigured
                                 && !vectorReadyIds.contains(match.candidate().id())) {
-                            // DW-065: the row exists, but an earlier embedding failed. It is
+                            // the row exists, but an earlier embedding failed. It is
                             // searchable by text only, and no pass ever filled the gap. Without a
                             // provider there is no vector lane to heal, so the row is left alone.
                             withoutVectors.add(match);

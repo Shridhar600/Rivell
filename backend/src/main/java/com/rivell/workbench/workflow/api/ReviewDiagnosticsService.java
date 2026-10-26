@@ -201,7 +201,7 @@ public class ReviewDiagnosticsService {
     /**
      * Whether the frozen snapshot still describes the live world. This is the same comparison the
      * analysis itself makes, reported rather than acted on, so an operator can see drift before it
-     * turns into a degraded run. It covers all four inputs, not only the semantics digest (DW-019):
+     * turns into a degraded run. It covers all four inputs, not only the semantics digest:
      * a changed retrieval index or model binding degrades checks even when the contract text has
      * not moved.
      */

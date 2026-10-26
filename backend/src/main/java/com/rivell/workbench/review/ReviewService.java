@@ -84,7 +84,7 @@ public class ReviewService {
     }
 
     /**
-     * M10 / DW-020: with a client-supplied key, creation is idempotent. A retry or a double-click
+     * With a client-supplied key, creation is idempotent. A retry or a double-click
      * returns the original review instead of freezing a second snapshot, planning a second run and
      * paying for a second analysis. The replay is resolved before any work, and the unique index on
      * (organization_id, client_request_id) is the authority when two identical requests race.

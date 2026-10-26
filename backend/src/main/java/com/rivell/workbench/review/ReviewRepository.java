@@ -16,7 +16,7 @@ public interface ReviewRepository {
     Optional<Review> find(UUID organizationId, UUID reviewId);
 
     /**
-     * M10 / DW-020: resolves a prior creation made with the same client-supplied key, so a retry
+     * Resolves a prior creation made with the same client-supplied key, so a retry
      * returns the original review instead of freezing a second snapshot and paying for a second
      * analysis. Scoped by organization, so one tenant's key can never resolve another's review.
      */

@@ -92,7 +92,7 @@ public final class TopicClassifier {
     }
 
     /**
-     * DW-098: a numbered heading that names its topic ("XIII TERM AND TERMINATION") carries
+     * A numbered heading that names its topic ("XIII TERM AND TERMINATION") carries
      * that topic for coverage. It never becomes the primary. Only a topic that already passed
      * the classifier can be carried. A phrase of any topic shadows a shorter phrase it
      * contains, so "Termination for Convenience" does not fall back to the generic

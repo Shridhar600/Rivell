@@ -219,7 +219,7 @@ public class CandidateReviewService {
     }
 
     /**
-     * Human taxonomy-key correction on a candidate before publication (DW-017):
+     * Human taxonomy-key correction on a candidate before publication:
      * same layering proven in M5 contracts — the machine concept is preserved,
      * a human correction (set key, or blank = clear to unclassified) defines the
      * effective concept that publication and retrieval consume. A correction that
@@ -339,8 +339,8 @@ public class CandidateReviewService {
                 // Bulk approval is the only review path that approves without a human reading the
                 // row, so it must not act on a category captured at extraction: another candidate
                 // may have been published since, which can turn this one into a duplicate or a
-                // contradiction. The stored category stays a snapshot (DW-053 covers the
-                // individually reviewed and published paths); the decision is re-derived here and
+                // contradiction. The stored category stays a snapshot (the individually reviewed
+                // and published paths handle freshness separately); the decision is re-derived here and
                 // the refusal names the condition that made the candidate ineligible.
                 var current = recomputeConditions(loaded, loaded.artifactId());
                 if (current.reviewCategory() != ReviewCategory.ROUTINE) {

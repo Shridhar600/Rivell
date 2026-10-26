@@ -77,7 +77,7 @@ public class KnowledgeIngestionService {
     }
 
     /**
-     * The document-work slot is taken before the bytes are read, stored or recorded (DW-095). A
+     * The document-work slot is taken before the bytes are read, stored or recorded. A
      * busy limit therefore refuses the upload before any artifact row or file exists. The slot
      * covers only the file work (read, store, structure extraction); it is released before the
      * semantic compile, which can take minutes and does not hold the document in memory.

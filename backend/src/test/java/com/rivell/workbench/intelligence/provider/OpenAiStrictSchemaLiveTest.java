@@ -25,7 +25,7 @@ import com.rivell.workbench.intelligence.ReasoningSpec;
 import com.rivell.workbench.intelligence.SemanticState;
 
 /**
- * Paid OpenAI strict-json-schema conformance smoke (DW-006 closure): the known-good
+ * Paid OpenAI strict-json-schema conformance smoke: the known-good
  * strict reference route through the REAL chain with a model that natively enforces
  * strict structured output. Opt-in only (OPENAI_LIVE=1 with OPENAI_API_KEY; the key
  * is never printed or logged). ONE small synthetic call — conformance verification,

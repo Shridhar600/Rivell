@@ -21,7 +21,7 @@ import com.rivell.workbench.platform.parsing.DocxParserProperties;
 import com.rivell.workbench.platform.parsing.DocxStructuralParser;
 import com.rivell.workbench.platform.parsing.RedlineFixturePipeline;
 
-/** DW-079: a source package Word would repair must still execute as a redline. */
+/** A source package Word would repair must still execute as a redline. */
 class DocxRedlineRendererRepairTest {
 
     private static final long MAX_UNCOMPRESSED_BYTES = 200L * 1024 * 1024;

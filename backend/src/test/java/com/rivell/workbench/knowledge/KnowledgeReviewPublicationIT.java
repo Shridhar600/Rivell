@@ -167,7 +167,7 @@ class KnowledgeReviewPublicationIT {
     }
 
     /**
-     * DW-088: PostgreSQL timestamptz keeps microseconds. Every transition returns the candidate it
+     * PostgreSQL timestamptz keeps microseconds. Every transition returns the candidate it
      * wrote, so the returned timestamps must already carry the precision the database keeps. Each
      * step is read back before the next one, because the next transition rewrites the row.
      */
@@ -215,7 +215,7 @@ class KnowledgeReviewPublicationIT {
     }
 
     /**
-     * M10 / DW-001: publication numbers are allocated as max + 1 with no lock. Two concurrent
+     * Publication numbers are allocated as max + 1 with no lock. Two concurrent
      * publications therefore raced for the same number, and the loser surfaced a raw integrity
      * violation to the user with no route forward except a blind retry. Both must succeed with
      * distinct, consecutive numbers, and the numbering must stay uncorrupt.

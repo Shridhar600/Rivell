@@ -1,7 +1,7 @@
 package com.rivell.workbench.knowledge;
 
 /**
- * Where an approval rule was stated. Council §A.1: the most specific rule wins for one stance,
+ * Where an approval rule was stated. The most specific rule wins for one stance,
  * and the level keeps that precedence auditable.
  */
 public enum AuthorityLevel {

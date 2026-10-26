@@ -23,7 +23,7 @@ import com.rivell.workbench.taxonomy.ConceptKey;
  *
  * <p>{@code requiresApprovalCleared} distinguishes "the person cleared this field" from
  * "this correction did not touch the field". Both arrive as a null value, and a null value
- * alone must keep an older correction's meaning (DW-099: null after an edit means "not
+ * alone must keep an older correction's meaning (null after an edit means "not
  * specified"). Rows written before this marker existed deserialize with it false, so their
  * correction still falls back to the machine answer. {@code authorityRulesCleared} does the
  * same for the rule list, where an empty list is a deliberate clear; {@code positionsCleared}

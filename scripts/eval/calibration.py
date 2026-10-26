@@ -55,7 +55,7 @@ def build_records(run, contract, answer, raw, score=None):
     score = score_contract(answer, raw["nodes"], clauses, raw["findings"]) if score is None else score
     expected = answer.get("expectedIssues", [])
     if len(expected) != len(score["issues"]):
-        # a zip would silently drop the tail (DW-059): refuse a score that cannot be joined
+        # a zip would silently drop the tail: refuse a score that cannot be joined
         raise ValueError(f"{contract}: {len(expected)} expectedIssues but "
                          f"{len(score['issues'])} scored issues")
     common = {"run": run, "contract": contract, "absenceCredit": ABSENCE_CREDIT}
@@ -130,7 +130,7 @@ def _is_holdout(text):
 
 
 def refuse_holdout(corpus, runs, roots=None):
-    """Refuse a holdout corpus or a run whose own meta names one (DW-059).
+    """Refuse a holdout corpus or a run whose own meta names one.
 
     The --corpus path alone is not enough: a run made on a holdout can be passed with a train
     corpus path, and the thresholds would be fitted on it. A run that records no corpus at all
@@ -162,7 +162,7 @@ def build(corpus, runs):
                   if check.get("key", "").startswith(POLICY_CHECK)]
         if not policy or any(not isinstance(check.get("judgedPositions"), list)
                              for check in policy):
-            # DW-059: any() let a partly-P0 run through; every policy check must carry the field
+            # any() let a partly-P0 run through; every policy check must carry the field
             sys.exit(f"{run_dir} is not a P0 run: every policy-comparison check must carry "
                      "judgedPositions")
         for path, raw in loaded:
@@ -312,7 +312,7 @@ def _table(header, rows):
 def report(records):
     credit = next((row.get("absenceCredit") for row in records if row.get("absenceCredit")), None)
     lines = ["# P0 calibration", "",
-             f"Absence credit: {credit or 'not recorded (rows predate DW-069; concept stems)'}", "",
+             f"Absence credit: {credit or 'not recorded (rows predate absence credit; concept stems)'}", "",
              f"Confident band (spec §6 initial): pMax ≥ {CONFIDENT_P} and top-2 margin ≥ {CONFIDENT_MARGIN}.", ""]
     for run in sorted({r["run"] for r in records}):
         rs = [r for r in records if r["run"] == run]

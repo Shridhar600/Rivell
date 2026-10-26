@@ -120,7 +120,7 @@ public record KnowledgeCandidate(
     /**
      * The concept human review consumes: the human correction when one exists
      * (set key, or blank = human-cleared unclassified), else the machine proposal
-     * (DW-017 — machine history is never erased).
+     * (machine history is never erased).
      */
     public String effectiveConceptKey() {
         if (conceptCorrection == null) {

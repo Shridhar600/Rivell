@@ -4,7 +4,7 @@
 Reads the action set built by `$CTX/eval/fidelity/tools/build_action_set.py` and one eval run's
 `raw/*.json` (findings already fetched by run_eval.py). Findings are matched to action-set issues
 the way run_eval.py matches issues: the answer key's sections are matched to the run's headings,
-and an absence finding is credited by its position label or reference (DW-069). Files only: no
+and an absence finding is credited by its position label or reference. Files only: no
 backend, no model call.
 
 Metrics:
@@ -271,7 +271,7 @@ def report_lines(scored, meta):
               f"- Contracts skipped because every issue there is unjoined: "
               f"{scored.get('contractsSkipped', 0)}",
               f"- Absence credit in this run: "
-              f"{(meta.get('runMeta') or {}).get('absenceCredit') or 'not recorded (the run predates DW-069)'}",
+              f"{(meta.get('runMeta') or {}).get('absenceCredit') or 'not recorded (the run predates absence credit)'}",
               "- One finding is claimed by at most one issue (a section shared by two issues does "
               "not count one escalation twice); totals are issue-level.", ""]
     lines += ["## Per contract", ""]

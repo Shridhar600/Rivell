@@ -116,7 +116,7 @@ public class KnowledgePublicationService {
             }
         }
 
-        // M10 / DW-001: publication numbers are allocated as max + 1 with no lock, so two concurrent
+        // Publication numbers are allocated as max + 1 with no lock, so two concurrent
         // publications can pick the same number. The unique constraint keeps numbering uncorrupt, but
         // the loser used to fail outright and the user had to retry blind. The whole transactional
         // unit is retried against a freshly allocated number; the event is published inside the

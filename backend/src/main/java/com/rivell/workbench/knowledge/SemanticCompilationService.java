@@ -76,7 +76,7 @@ public class SemanticCompilationService {
             columnsByUnit.putIfAbsent(candidate.extractionUnitId(), candidate.payload().columns());
         }
         // A document's approval matrix and approval tables are authority sources, read before
-        // any record is judged and never published as positions (council §A.1, §A.4).
+        // any record is judged and never published as positions.
         var authorityUnits = new LinkedHashSet<UUID>();
         var authorityRules = new ArrayList<AuthoritySourceRule>();
         for (var unit : units) {
@@ -306,7 +306,7 @@ public class SemanticCompilationService {
             interpretFieldRoles(candidate, roles, builder, fields, provenance, typed);
         }
         interpretScopeNarrowing(state, provenance, fields);
-        // the entry's own rules and the document rules meet here, by the council's precedence
+        // the entry's own rules and the document rules meet here, by the fixed precedence
         var authority = authorityCatalog.merge(
                 candidate.effectiveTitle(), unit.contentText(), typed.entryRules());
         builder.authority(authority.rules(), authority.conflicts());

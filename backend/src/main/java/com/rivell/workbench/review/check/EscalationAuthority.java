@@ -8,7 +8,7 @@ import com.rivell.workbench.review.PolicyComparisonSpecs;
 import com.rivell.workbench.retrieval.EvidenceItem;
 
 /**
- * Council §A.3: a finding escalates only when a typed rule applies. A walk-away or a clause
+ * A finding escalates only when a typed rule applies. A walk-away or a clause
  * beyond the fallback escalates with the rule that covers that stance; a within-fallback note,
  * or an unclear reading that may be one, needs approval only when a rule says the fallback
  * itself needs it. A condition becomes the panel's "Escalate if" line for a walk-away and its

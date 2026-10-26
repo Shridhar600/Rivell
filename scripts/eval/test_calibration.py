@@ -151,7 +151,7 @@ class GuardTest(unittest.TestCase):
 
 
 class Dw059Test(unittest.TestCase):
-    """Pack D, DW-059: the four eval-tooling minors."""
+    """The eval-tooling fixes."""
 
     def setUp(self):
         self.root = pathlib.Path(TMP.name, f"dw059-{self._testMethodName}")
@@ -170,7 +170,7 @@ class Dw059Test(unittest.TestCase):
         return run
 
     def test_a_run_whose_own_meta_names_a_holdout_is_refused(self):
-        # DW-059(1): the --corpus path said dev2, but the run recorded a holdout in its meta
+        # the --corpus path said dev2, but the run recorded a holdout in its meta
         run = self.run_dir("holdout-run", [check("h1", [position(probs(MEETS_PREFERRED=0.9))])],
                            meta={"corpus": "/x/eval/corpus/holdout3"})
         with self.assertRaises(SystemExit) as raised:
@@ -203,13 +203,13 @@ class Dw059Test(unittest.TestCase):
         self.assertIn("records no corpus", str(raised.exception))
 
     def test_a_score_with_a_different_issue_count_is_refused(self):
-        # DW-059(2): build_records zipped the key and the score without checking the lengths
+        # build_records zipped the key and the score without checking the lengths
         with self.assertRaises(ValueError) as raised:
             calibration.build_records("r", "c", ANSWER, raw([]), score={"issues": []})
         self.assertIn("expectedIssues", str(raised.exception))
 
     def test_one_policy_check_without_judged_positions_refuses_the_run(self):
-        # DW-059(3): any() let a partially P0 run through; every policy check must carry the field
+        # any() let a partially P0 run through; every policy check must carry the field
         run = self.run_dir("partial", [
             check("h1", [position(probs(MEETS_PREFERRED=0.9))]),
             {"key": "CLAUSE:POLICY_COMPARISON:TOPIC:h2", "subjectHeadingNodeId": "h2",
@@ -248,7 +248,7 @@ class Dw059Test(unittest.TestCase):
         self.assertIn("Absence credit: not recorded", calibration.report(records))
 
     def test_a_blank_probe_category_reads_as_null_like_the_api(self):
-        # DW-059(5): the check detail writes "" while the diagnostics API writes null
+        # the check detail writes "" while the diagnostics API writes null
         records = calibration.build_records("r", "c", ANSWER, standard_raw(
             probe=probs(BEYOND_FALLBACK=0.7), probe_flagged=True))
         judged = [r for r in records if r["kind"] == "judged" and r.get("positionKey")]
