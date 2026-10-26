@@ -448,12 +448,13 @@ export function semanticInputFrom(
   // The backend replaces the whole human-corrected record, so send the complete
   // applicable set; the draft is seeded from effective values and therefore
   // preserves earlier corrections. An unset approval is sent as an explicit null so
-  // "not specified" is a value, not an omitted field that keeps the old answer.
+  // "not specified" is a value, not an omitted field that keeps the old answer. An
+  // empty position set or escalation trigger is a deliberate clear and is sent too.
   const input: SemanticFieldsEditInput = {}
   if (isPlaybook) {
-    if (draft.positions.length > 0) input.positions = draft.positions
+    input.positions = draft.positions
     input.requiresApproval = approvalDraft
-    if (escalationDraft.length > 0) input.escalationTrigger = escalationDraft
+    input.escalationTrigger = escalationDraft
     input.preferredText = draft.preferredText.trim()
     input.fallbackTexts = fallbackLines(draft.fallbackTexts)
     input.prohibitedText = draft.prohibitedText.trim()

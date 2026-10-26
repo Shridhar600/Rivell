@@ -145,6 +145,9 @@ class KnowledgeReviewConcurrencyIT {
     KnowledgeRepository rawRepository;
 
     @Autowired
+    KnowledgeRepository repository;
+
+    @Autowired
     MutableIdentityProvider identityProvider;
 
     @TestConfiguration(proxyBeanMethods = false)
@@ -254,6 +257,31 @@ class KnowledgeReviewConcurrencyIT {
     }
 
     /**
+     * A retry that passes the replay pre-check before the first request commits loses the unique
+     * index race. The index decides the winner; the loser must read it back and return it rather
+     * than fail, and must not store a second artifact.
+     */
+    @Test
+    void aLostUploadRaceReturnsTheStoredArtifactWithoutStoringASecond() throws Exception {
+        var clientRequestId = UUID.randomUUID();
+        var first = ingestMatrix(clientRequestId);
+        ((InterceptingKnowledgeRepository) repository).replayOnConflict(clientRequestId);
+
+        var second = ingestMatrix(clientRequestId);
+
+        assertThat(second.id()).isEqualTo(first.id());
+        assertThat(jdbc.sql("""
+                select count(*) from knowledge_artifact
+                where organization_id = :org and client_request_id = :key
+                """)
+                .param("org", organizationId)
+                .param("key", clientRequestId)
+                .query(Long.class).single())
+                .as("the loser of the race must not leave a second artifact")
+                .isEqualTo(1);
+    }
+
+    /**
      * The contract the other tests rely on, asserted directly: the compare-and-set reports
      * whether it matched a row, and a caller that ignores that answer is relying on luck.
      */
@@ -296,11 +324,15 @@ class KnowledgeReviewConcurrencyIT {
     }
 
     private KnowledgeArtifact ingestMatrix() throws Exception {
+        return ingestMatrix(null);
+    }
+
+    private KnowledgeArtifact ingestMatrix(UUID clientRequestId) throws Exception {
         try (var stream = getClass().getClassLoader()
                 .getResourceAsStream("fixtures/knowledge-matrix.xlsx")) {
             assertThat(stream).as("fixture knowledge-matrix.xlsx").isNotNull();
             return ingestionService.ingest("matrix.xlsx", XLSX_MEDIA_TYPE,
-                    ArtifactType.PLAYBOOK, null, stream);
+                    ArtifactType.PLAYBOOK, null, stream, clientRequestId);
         }
     }
 
@@ -313,11 +345,20 @@ class KnowledgeReviewConcurrencyIT {
 
         private final KnowledgeRepository delegate;
         private final ConcurrentEdit concurrentEdit;
+        private final java.util.concurrent.atomic.AtomicInteger keyLookups =
+                new java.util.concurrent.atomic.AtomicInteger();
+        private volatile UUID replayKey;
 
         InterceptingKnowledgeRepository(
                 KnowledgeRepository delegate, ConcurrentEdit concurrentEdit) {
             this.delegate = delegate;
             this.concurrentEdit = concurrentEdit;
+        }
+
+        /** Makes the next lookup miss and the next insert with this key lose the unique index race. */
+        void replayOnConflict(UUID clientRequestId) {
+            this.replayKey = clientRequestId;
+            this.keyLookups.set(0);
         }
 
         @Override
@@ -339,6 +380,10 @@ class KnowledgeReviewConcurrencyIT {
 
         @Override
         public void insertArtifact(KnowledgeArtifact artifact) {
+            if (replayKey != null && replayKey.equals(artifact.clientRequestId())) {
+                throw new org.springframework.dao.DataIntegrityViolationException(
+                        "duplicate key value violates unique constraint");
+            }
             delegate.insertArtifact(artifact);
         }
 
@@ -373,6 +418,16 @@ class KnowledgeReviewConcurrencyIT {
         @Override
         public Optional<KnowledgeArtifact> findArtifact(UUID artifactId, UUID organizationId) {
             return delegate.findArtifact(artifactId, organizationId);
+        }
+
+        @Override
+        public Optional<KnowledgeArtifact> findByClientRequestId(
+                UUID organizationId, UUID clientRequestId) {
+            if (replayKey != null && replayKey.equals(clientRequestId)
+                    && keyLookups.getAndIncrement() == 0) {
+                return Optional.empty();
+            }
+            return delegate.findByClientRequestId(organizationId, clientRequestId);
         }
 
         @Override

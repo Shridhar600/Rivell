@@ -76,13 +76,13 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                          sha256, storage_key, declared_contract_types, contract_pack_key,
                          party_perspective, paper_source, jurisdiction, language, effective_from,
                          effective_to, manifest_note, ingest_status, parser_version, parse_warnings,
-                         artifact_assessment, created_at)
+                         artifact_assessment, created_at, client_request_id)
                         values (:id, :organizationId, :artifactType, :filename, :contentType,
                                 :sizeBytes, :sha256, :storageKey, :declaredContractTypes::jsonb,
                                 :contractPackKey, :partyPerspective, :paperSource, :jurisdiction,
                                 :language, :effectiveFrom, :effectiveTo, :manifestNote,
                                 :ingestStatus, :parserVersion, :parseWarnings::jsonb,
-                                :artifactAssessment::jsonb, :createdAt)
+                                :artifactAssessment::jsonb, :createdAt, :clientRequestId)
                         """)
                 .param("id", artifact.id())
                 .param("organizationId", artifact.organizationId())
@@ -106,6 +106,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 .param("parseWarnings", writeList(artifact.parseWarnings()))
                 .param("artifactAssessment", writeArtifactAssessment(artifact.assessment()))
                 .param("createdAt", Timestamp.from(artifact.createdAt()))
+                .param("clientRequestId", artifact.clientRequestId())
                 .update();
     }
 
@@ -219,6 +220,20 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                         """)
                 .param("id", artifactId)
                 .param("organizationId", organizationId)
+                .query(this::mapArtifact)
+                .optional();
+    }
+
+    @Override
+    public Optional<KnowledgeArtifact> findByClientRequestId(
+            UUID organizationId, UUID clientRequestId) {
+        return jdbcClient.sql("""
+                        select * from knowledge_artifact
+                        where organization_id = :organizationId
+                          and client_request_id = :clientRequestId
+                        """)
+                .param("organizationId", organizationId)
+                .param("clientRequestId", clientRequestId)
                 .query(this::mapArtifact)
                 .optional();
     }
@@ -1121,7 +1136,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 readList(rs.getString("parse_warnings")),
                 readArtifactAssessment(rs.getString("artifact_assessment")),
                 instant(rs, "created_at"),
-                rs.getString("document_title"));
+                rs.getString("document_title"),
+                uuid(rs, "client_request_id"));
     }
 
     private KnowledgeSourceNode mapNode(ResultSet rs, int rowNum) throws SQLException {

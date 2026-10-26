@@ -67,6 +67,46 @@ class SemanticFieldModelTest {
     }
 
     @Test
+    void clearedPositionsAndEscalationTriggerStayClearedButAnOlderEditFallsBack() {
+        var machine = new SemanticFields(Set.of(PositionRole.PREFERRED), null,
+                "Escalate to GC", null, Map.of());
+        var cleared = new SemanticFields(Set.of(), null, "", null, Map.of())
+                .withPositionsCleared()
+                .withEscalationTriggerCleared();
+        var legacyEdit = new SemanticFields(Set.of(), null, null, null, Map.of());
+
+        assertThat(candidate(machine, cleared).effectivePositions()).isEmpty();
+        assertThat(candidate(machine, cleared).effectiveEscalationTrigger()).isNull();
+        assertThat(candidate(machine, cleared).correctedFields())
+                .containsExactlyInAnyOrder("positions", "escalationTrigger");
+        assertThat(candidate(machine, legacyEdit).effectivePositions())
+                .containsExactly(PositionRole.PREFERRED);
+        assertThat(candidate(machine, legacyEdit).effectiveEscalationTrigger())
+                .isEqualTo("Escalate to GC");
+    }
+
+    @Test
+    void clearingAValueTheMachineNeverHadIsNotACorrection() {
+        var machine = new SemanticFields(Set.of(), null, null, null, Map.of());
+        var cleared = new SemanticFields(Set.of(), null, "", null, Map.of())
+                .withPositionsCleared()
+                .withEscalationTriggerCleared();
+
+        assertThat(candidate(machine, cleared).correctedFields()).isEmpty();
+    }
+
+    @Test
+    void clearingAnAlreadyBlankEscalationTriggerIsNotACorrection() {
+        var machine = new SemanticFields(Set.of(PositionRole.PREFERRED), null, "  ", null,
+                Map.of());
+        var cleared = new SemanticFields(Set.of(PositionRole.PREFERRED), null, "", null, Map.of())
+                .withEscalationTriggerCleared();
+
+        assertThat(candidate(machine, cleared).correctedFields())
+                .doesNotContain("escalationTrigger");
+    }
+
+    @Test
     void aStoredProposalThatWasNotAppliedIsNotACorrectedField() {
         var machine = new SemanticFields(Set.of(), null, null, null, Map.of());
 

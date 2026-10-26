@@ -29,6 +29,9 @@ public interface KnowledgeRepository {
 
     Optional<KnowledgeArtifact> findArtifact(UUID artifactId, UUID organizationId);
 
+    /** The artifact one client request key already produced, when a retry repeats that request. */
+    Optional<KnowledgeArtifact> findByClientRequestId(UUID organizationId, UUID clientRequestId);
+
     /**
      * Newest-first artifact list. {@code limit} bounds the read; null keeps the
      * unbounded behaviour existing callers rely on.

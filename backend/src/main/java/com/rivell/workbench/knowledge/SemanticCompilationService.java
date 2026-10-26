@@ -766,7 +766,8 @@ public class SemanticCompilationService {
         SemanticFields build() {
             return new SemanticFields(positions, requiresApproval, escalationTrigger, variantRole,
                     conceptProbabilities, false, preferredText, fallbackTexts, prohibitedText,
-                    authorityRules, authorityConflicts, false, unmappedAuthority, false);
+                    authorityRules, authorityConflicts, false, unmappedAuthority, false, false,
+                    false);
         }
     }
 }
