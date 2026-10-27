@@ -35,7 +35,7 @@ import com.rivell.workbench.retrieval.EvidenceItem;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
 /**
- * M7 integration-hardening wave: DW-024 secondary-only coverage, DW-027 multi-clause
+ * M7 integration-hardening wave: secondary-only coverage, multi-clause
  * survival honesty, lease-reclaim interleaving, and exact cross-clause source evidence.
  */
 @SpringBootTest

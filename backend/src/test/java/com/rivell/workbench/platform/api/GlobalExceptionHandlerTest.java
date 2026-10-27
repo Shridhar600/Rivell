@@ -11,7 +11,7 @@ import com.rivell.workbench.redline.RedlineFailureCode;
 import com.rivell.workbench.redline.RedlineSourceUnavailableException;
 
 /**
- * DW-094 and DW-095: two error paths that used to leak or misdescribe the failure. A 400 carries
+ * Two error paths that used to leak or misdescribe the failure. A 400 carries
  * a code-owned sentence, never the exception's own message; a saturated document-work limit
  * answers 503 with a retry hint instead of holding the request.
  */

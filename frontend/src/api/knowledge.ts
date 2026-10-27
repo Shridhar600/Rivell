@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import {
   useMutation,
   useQuery,
@@ -5,6 +6,7 @@ import {
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query'
+import { newRequestId } from '../lib/requestId'
 import { createApiClient } from './client'
 import {
   MALFORMED_RESPONSE_MESSAGE,
@@ -301,6 +303,8 @@ export interface Candidate {
   title: string
   contentText: string | null
   payloadColumns: Record<string, string>
+  /** Role of each payload label ("REFERENCE", "TOPIC", "VARIANT"), as the compiler resolved it. */
+  payloadFieldRoles: Record<string, string>
   legalConceptKey: string | null
   /** The human correction when one exists, otherwise the classified concept. Absent when neither is set. */
   effectiveConceptKey: string | null
@@ -590,6 +594,7 @@ export function parseCandidate(value: unknown, what = 'candidate'): Candidate {
     title: readString(record, 'title', what),
     contentText: readNullableString(record, 'contentText', what),
     payloadColumns: readStringMap(record, 'payloadColumns', what),
+    payloadFieldRoles: readStringMap(record, 'payloadFieldRoles', what),
     legalConceptKey: readNullableString(record, 'legalConceptKey', what),
     effectiveConceptKey: readNullableString(record, 'effectiveConceptKey', what),
     conceptCorrection: readNullableString(record, 'conceptCorrection', what),
@@ -725,8 +730,8 @@ const KNOWLEDGE_MESSAGES: Partial<Record<number, string>> = {
 
 /**
  * Bounded so Home and the legacy lists cannot request an unbounded page. The backend caps both
- * knowledge lists at 100. Neither list has a cursor yet, so a page is not the whole set; the
- * remaining GAP-C items are recorded in DEFERRED_WORK.md.
+ * knowledge lists at 100. Neither list has a cursor yet, so a page is not the whole set;
+ * reading past the first page is not supported yet.
  */
 export const KNOWLEDGE_PAGE_LIMIT = 20
 
@@ -970,13 +975,16 @@ function manifestQuery(
 export async function uploadKnowledge(
   file: File,
   manifest: ArtifactManifestInput,
+  clientRequestId?: string | null,
 ): Promise<ArtifactDetail> {
   const client = createApiClient()
   const formData = new FormData()
   formData.append('file', file)
+  const query = manifestQuery(manifest)
+  if (clientRequestId) query.clientRequestId = clientRequestId
 
   const { data, response } = await client.POST('/api/knowledge/artifacts', {
-    params: { query: manifestQuery(manifest) },
+    params: { query },
     body: { file: file.name },
     bodySerializer: () => formData,
   })
@@ -1260,15 +1268,33 @@ export interface UploadKnowledgeVariables {
   manifest: ArtifactManifestInput
 }
 
+export interface UploadRequestKey {
+  signature: string
+  id: string | null
+}
+
+/** One key per unchanged upload: the same file and manifest keep it, a changed upload gets a new one. */
+export function uploadRequestKey(
+  current: UploadRequestKey | null,
+  file: File,
+  manifest: ArtifactManifestInput,
+): UploadRequestKey {
+  const signature = `${file.name}:${file.size}:${file.lastModified}:${JSON.stringify(manifest)}`
+  return current?.signature === signature ? current : { signature, id: newRequestId() }
+}
+
 export function useUploadKnowledge(): UseMutationResult<
   ArtifactDetail,
   Error,
   UploadKnowledgeVariables
 > {
   const queryClient = useQueryClient()
+  const request = useRef<UploadRequestKey | null>(null)
   return useMutation({
-    mutationFn: ({ file, manifest }: UploadKnowledgeVariables) =>
-      uploadKnowledge(file, manifest),
+    mutationFn: ({ file, manifest }: UploadKnowledgeVariables) => {
+      request.current = uploadRequestKey(request.current, file, manifest)
+      return uploadKnowledge(file, manifest, request.current.id)
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: knowledgeKeys.artifacts })
     },

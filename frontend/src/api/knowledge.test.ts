@@ -11,6 +11,7 @@ import {
   parseKnowledgeNode,
   parsePublication,
   uploadKnowledge,
+  uploadRequestKey,
 } from './knowledge'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -438,6 +439,21 @@ describe('knowledge list queries', () => {
   })
 })
 
+describe('uploadRequestKey', () => {
+  it('keeps one key for the same file and manifest and changes it for a different upload', () => {
+    const file = new File(['bytes'], 'playbook.docx')
+    const manifest = { artifactType: 'PLAYBOOK' as const, declaredContractTypes: [] }
+
+    const first = uploadRequestKey(null, file, manifest)
+
+    expect(uploadRequestKey(first, file, manifest).id).toBe(first.id)
+    expect(uploadRequestKey(first, new File(['other bytes'], 'playbook.docx'), manifest).id)
+      .not.toBe(first.id)
+    expect(uploadRequestKey(first, file, { ...manifest, note: 'changed' }).id)
+      .not.toBe(first.id)
+  })
+})
+
 describe('uploadKnowledge', () => {
   it('sends the multipart file with manifest query parameters', async () => {
     const { requests } = stubFetch(() => jsonResponse(envelope(artifactDetail)))
@@ -465,6 +481,20 @@ describe('uploadKnowledge', () => {
     expect(url.searchParams.has('note')).toBe(false)
     expect(requests[0].method).toBe('POST')
     expect(requests[0].headers.get('content-type')).toContain('multipart/form-data')
+  })
+
+  it('sends the client request id so a retried upload replays the stored source', async () => {
+    const { requests } = stubFetch(() => jsonResponse(envelope(artifactDetail)))
+
+    const file = new File(['bytes'], 'knowledge-playbook.docx')
+    await uploadKnowledge(
+      file,
+      { artifactType: 'PLAYBOOK', declaredContractTypes: [] },
+      '11111111-1111-4111-8111-111111111111',
+    )
+
+    const url = new URL(requests[0].url)
+    expect(url.searchParams.get('clientRequestId')).toBe('11111111-1111-4111-8111-111111111111')
   })
 
   it('reports a bounded upload error that names no server text', async () => {

@@ -2,11 +2,15 @@ package com.rivell.workbench.contracts;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.InputStream;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+
+import com.rivell.workbench.platform.parsing.DocxParserProperties;
+import com.rivell.workbench.platform.parsing.DocxStructuralParser;
 
 class ContractRegionSegmenterTest {
 
@@ -253,6 +257,64 @@ class ContractRegionSegmenterTest {
                 .as("the schedule keeps its content and loses the signatures")
                 .contains("greater of 5% or CPI").doesNotContain("IN WITNESS");
         assertThat(regions.get(2).headingNodeId()).isEqualTo(witness.id());
+    }
+
+    /**
+     * The SOW file holds its milestone and rate tables after the signature block. They must stay
+     * in the text the review reads, in row and cell order; folded into the signature block they
+     * were dropped, and a whole-contract read said the milestone schedule was missing.
+     */
+    @Test
+    void tablesAfterTheExecutionBlockStayReviewableContent() throws Exception {
+        var parser = new DocxStructuralParser(new DocxParserProperties(200L * 1024 * 1024));
+        ParseResult parsed;
+        try (InputStream in = getClass().getClassLoader()
+                .getResourceAsStream("fixtures/h-sow-under-msa.docx")) {
+            parsed = parser.parse(in, VERSION);
+        }
+        var regions = new ContractRegionSegmenter().segment(parsed.nodes());
+
+        var reviewable = regions.stream()
+                .filter(region -> region.kind() != ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK)
+                .map(ContractRegionSegmenter.Region::contentText)
+                .reduce("", (left, right) -> left + "\n" + right);
+        assertThat(reviewable).containsSubsequence(
+                "M1", "Brand strategy and positioning", "30 April 2025", "CAD 60,000",
+                "M2", "Visual identity system", "31 May 2025", "CAD 75,000",
+                "M3", "Campaign creative and media plan", "30 June 2025", "CAD 110,000",
+                "Creative director", "CAD 2,400");
+
+        var milestones = regions.stream()
+                .filter(region -> region.contentText().contains("CAD 60,000"))
+                .findFirst().orElseThrow();
+        assertThat(milestones.isPreamble()).as("enrichment skips preamble regions").isFalse();
+        assertThat(milestones.kind()).isNotEqualTo(ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK);
+        assertThat(milestones.headingText()).isNotBlank();
+    }
+
+    @Test
+    void aSignatureTableAfterTheExecutionBlockStaysPartOfTheSignatures() {
+        var witness = paragraph("IN WITNESS WHEREOF the parties have executed this Agreement.", 2);
+        var table = new DocumentNode(UUID.randomUUID(), VERSION, BODY_ID,
+                DocumentNodeType.TABLE, 3, null, null, null,
+                SourceSpan.ofTable("word/document.xml", 3, 0), null);
+        var row = new DocumentNode(UUID.randomUUID(), VERSION, table.id(),
+                DocumentNodeType.TABLE_ROW, 0, null, null, null,
+                SourceSpan.ofTable("word/document.xml", 3, 0), null);
+        var nodes = List.of(
+                BODY_NODE,
+                heading("1. Term", "1", 0),
+                paragraph("This Agreement lasts three years.", 1),
+                witness,
+                table, row,
+                tableCell(row, "Signature:", 1L, 0),
+                tableCell(row, "Name: Jane Doe, Title: Director", 2L, 1));
+
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        assertThat(regions).noneMatch(region -> region.kind()
+                != ContractRegionSegmenter.SemanticRegionKind.SIGNATURE_BLOCK
+                && region.contentText().contains("Jane Doe"));
     }
 
     @Test

@@ -203,6 +203,14 @@ class OmissionMetricsTest(unittest.TestCase):
         self.assertEqual([entry["matched"] for entry in metrics["list"]], [True, False, True])
         self.assertEqual(metrics["list"][0]["presence"], 0.92)
 
+    def test_a_walk_away_finding_reports_its_absence_estimate(self):
+        metrics = p4_metrics.omission_metrics(ANSWER, [
+            finding("MISSING_POSITION", severity="MEDIUM", concept="TERM",
+                    quality={"positionLabel": "Termination for convenience",
+                             "absenceProbability": 0.92}),
+        ])
+        self.assertEqual(metrics["list"][0]["presence"], 0.92)
+
     def test_another_observation_kind_is_not_an_omission(self):
         metrics = p4_metrics.omission_metrics(ANSWER, [finding("MISSING_REQUIRED_CONCEPT")])
         self.assertEqual(metrics["medium"], 0)

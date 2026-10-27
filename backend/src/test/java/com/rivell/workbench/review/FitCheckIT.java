@@ -117,13 +117,17 @@ class FitCheckIT {
 
     /** pc-contract.docx against the PC playbook (the flow the search route tests pin). */
     private UUID reviewedContract() throws Exception {
+        return reviewedContract("pc-contract.docx");
+    }
+
+    private UUID reviewedContract(String fixture) throws Exception {
         positions = corpusBuilder.publishAll(organizationId(), M6EvidenceCorpus.Fixture.PC_PLAYBOOK,
                         M6EvidenceCorpus.msaManifest2026(), null).stream()
                 .filter(candidate -> candidate.candidateType() == CandidateType.PLAYBOOK_RULE)
                 .toList();
         var bytes = Files.readAllBytes(java.nio.file.Path.of(
-                "src/test/resources/fixtures/pc-contract.docx"));
-        var ingested = contractIngestionService.ingest("pc-contract.docx",
+                "src/test/resources/fixtures/" + fixture));
+        var ingested = contractIngestionService.ingest(fixture,
                 ContractIngestionService.DOCX_CONTENT_TYPE, new ByteArrayInputStream(bytes));
         enrichmentService.enrich(ingested.contractId(), 1,
                 new ReviewProfile(ContractType.MSA, PartyRole.CUSTOMER,
@@ -261,7 +265,7 @@ class FitCheckIT {
                 .filter(candidate -> "SEARCH".equals(candidate.quality().get("foundBy")))
                 .filter(candidate -> candidate.issueFamily() == IssueFamily.POSITION_NEEDS_FALLBACK)
                 .findFirst().orElseThrow();
-        // council §E: a partial fit is offered unchecked, not approved and not silently replaced
+        // a partial fit is offered unchecked, not approved and not silently replaced
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
         assertThat(finding.proposedLanguageSource())
                 .isEqualTo(ProposedLanguageSource.APPROVED_DRAFTING);
@@ -277,6 +281,26 @@ class FitCheckIT {
                 .containsEntry("wordingFitVerdict", "UNKNOWN")
                 .containsEntry("wordingFitReasons",
                         List.of("MEETS_POSITION_YES", "CURES_GAP_NO"));
+    }
+
+    @Test
+    void aRelatedPositionPaysForNoFitQuestionBecauseItsWordingIsNeverOffered() throws Exception {
+        corpusBuilder.publishAll(organizationId(), M6EvidenceCorpus.Fixture.PC_LIBRARY,
+                M6EvidenceCorpus.msaManifest2026(), null);
+        var reviewId = reviewedContract("pc-related-topic-contract.docx");
+        scriptedProvider.positionAnswers.put("never acceptable",
+                PolicyComparisonSpecs.WALK_AWAY);
+
+        var run = analysisService.analyze(organizationId(), reviewId);
+
+        var liability = positionId("Limitation of Liability");
+        assertThat(signalsCiting(run.id(), liability)).singleElement()
+                .satisfies(signal -> assertThat(
+                        ((PositionDeviationPayload) signal.payload()).secondaryTopic()).isTrue());
+        // the position governs only a topic the clause touches, so no drafting is offered and
+        // its wording is never put to the fit check
+        assertThat(scriptedProvider.fitCallsMade())
+                .noneMatch(call -> call.heading().contains("Termination"));
     }
 
     @Test

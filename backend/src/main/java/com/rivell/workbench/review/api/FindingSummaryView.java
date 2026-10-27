@@ -13,6 +13,7 @@ import com.rivell.workbench.review.ProposedLanguageSource;
 /**
  * Bounded list projection of one active-run finding. {@code relatedPosition} is true when the
  * deciding position governs a topic the clause only touches (a LOW note, not a breach).
+ * {@code partlyWithinFallback} is true when the fallback's conditions are only partly met.
  * {@code decidedBy}: who decided a policy-comparison finding — JEV, SECOND_OPINION (Jev and an
  * agreeing second opinion) or NEEDS_YOUR_LOOK (they disagreed or the second opinion was not
  * available, so the user decides); null for other findings. {@code addedBy}: the user who added
@@ -34,6 +35,7 @@ public record FindingSummaryView(
         ProposedAction proposedAction,
         ProposedLanguageSource proposedLanguageSource,
         boolean relatedPosition,
+        boolean partlyWithinFallback,
         String decidedBy,
         Instant createdAt,
         String addedBy,

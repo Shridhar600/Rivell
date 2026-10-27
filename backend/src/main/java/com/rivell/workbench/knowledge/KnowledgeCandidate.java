@@ -91,6 +91,23 @@ public record KnowledgeCandidate(
         return editedTitle == null || editedTitle.isBlank() ? rawLabel : editedTitle;
     }
 
+    /**
+     * The record's own reference code ("F-11"), when its source has a reference column. The code
+     * is display only: matching and retrieval use the candidate id.
+     */
+    public String effectiveReference() {
+        var payload = effectivePayload();
+        for (var key : payload.orderedKeys()) {
+            var value = payload.columns().get(key);
+            if (value != null && !value.isBlank()
+                    && payload.roleOf(key).filter(role -> role == RecordFieldRole.REFERENCE)
+                            .isPresent()) {
+                return value.strip();
+            }
+        }
+        return null;
+    }
+
     public KnowledgeCandidate withConflictSignals(List<ConflictSignal> signals) {
         return new KnowledgeCandidate(id, artifactId, organizationId, extractionUnitId,
                 candidateType, reviewStatus, rawLabel, contentText, payload, legalConceptKey, topicKeys, conceptCorrection,
@@ -103,7 +120,7 @@ public record KnowledgeCandidate(
     /**
      * The concept human review consumes: the human correction when one exists
      * (set key, or blank = human-cleared unclassified), else the machine proposal
-     * (DW-017 — machine history is never erased).
+     * (machine history is never erased).
      */
     public String effectiveConceptKey() {
         if (conceptCorrection == null) {
@@ -268,9 +285,15 @@ public record KnowledgeCandidate(
     }
 
     public Set<PositionRole> effectivePositions() {
-        return editedSemanticFields != null && !editedSemanticFields.positions().isEmpty()
-                ? editedSemanticFields.positions()
-                : semanticFields.positions();
+        if (editedSemanticFields != null) {
+            if (!editedSemanticFields.positions().isEmpty()) {
+                return editedSemanticFields.positions();
+            }
+            if (editedSemanticFields.positionsCleared()) {
+                return Set.of();
+            }
+        }
+        return semanticFields.positions();
     }
 
     public PositionRole effectiveVariantRole() {
@@ -280,9 +303,15 @@ public record KnowledgeCandidate(
     }
 
     public String effectiveEscalationTrigger() {
-        return editedSemanticFields != null && editedSemanticFields.escalationTrigger() != null
-                ? editedSemanticFields.escalationTrigger()
-                : semanticFields.escalationTrigger();
+        if (editedSemanticFields != null) {
+            if (editedSemanticFields.escalationTrigger() != null) {
+                return editedSemanticFields.escalationTrigger();
+            }
+            if (editedSemanticFields.escalationTriggerCleared()) {
+                return null;
+            }
+        }
+        return semanticFields.escalationTrigger();
     }
 
     public Boolean effectiveRequiresApproval() {
@@ -422,15 +451,19 @@ public record KnowledgeCandidate(
         }
         var edited = editedSemanticFields;
         var fields = new java.util.LinkedHashSet<String>();
-        if (!edited.positions().isEmpty() && !edited.positions().equals(semanticFields.positions())) {
+        if ((!edited.positions().isEmpty() || edited.positionsCleared())
+                && !edited.positions().equals(semanticFields.positions())) {
             fields.add("positions");
         }
         if (edited.variantRole() != null
                 && edited.variantRole() != semanticFields.effectiveVariantRole()) {
             fields.add("variantRole");
         }
-        if (edited.escalationTrigger() != null
-                && !edited.escalationTrigger().equals(semanticFields.escalationTrigger())) {
+        if ((edited.escalationTrigger() != null
+                        && !edited.escalationTrigger().equals(semanticFields.escalationTrigger()))
+                || (edited.escalationTriggerCleared()
+                        && semanticFields.escalationTrigger() != null
+                        && !semanticFields.escalationTrigger().isBlank())) {
             fields.add("escalationTrigger");
         }
         if ((edited.requiresApproval() != null

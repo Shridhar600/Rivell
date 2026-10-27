@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import com.rivell.workbench.intelligence.EmbeddingService;
 import com.rivell.workbench.intelligence.ProviderFailures;
+import com.rivell.workbench.intelligence.ProviderRejectedException;
 import com.rivell.workbench.intelligence.SemanticDecisionException;
 import com.rivell.workbench.knowledge.CandidateType;
 import com.rivell.workbench.knowledge.KnowledgeCandidate;
@@ -115,25 +116,32 @@ public class EvidenceIndexService {
             if (ProviderFailures.isOutOfCredit(e)) {
                 log.warn("Embedding generation degraded for organization {} (no credit)",
                         organizationId);
-            } else {
-                // one bad input must not leave the entire batch unindexed: retry each alone
-                var model = embeddingService.modelIdentity();
-                for (var entry : textsToEmbed.entrySet()) {
-                    try {
-                        var vector = embeddingService.embed(List.of(entry.getValue()))
-                                .vectors().get(0);
-                        if (persistVector(organizationId, entry.getKey(), entry.getValue(),
-                                model, vector)) {
-                            persisted++;
-                        }
-                    } catch (SemanticDecisionException ignored) {
-                        if (ProviderFailures.isOutOfCredit(ignored)) {
-                            log.warn("Embedding generation degraded for organization {} (no credit)",
-                                    organizationId);
-                            break;
-                        }
-                        // this input stays unindexed; the other inputs were still persisted
+                return persisted;
+            }
+            if (!(e instanceof ProviderRejectedException)) {
+                // a timeout or outage is not about one input: retrying each text would spend the
+                // same failing endpoint's budget once per input, so this pass stays lexical-only
+                log.warn("Embedding generation deferred for organization {}: {}",
+                        organizationId, e.toString());
+                return persisted;
+            }
+            // the batch was rejected: one bad input must not leave the entire batch unindexed
+            var model = embeddingService.modelIdentity();
+            for (var entry : textsToEmbed.entrySet()) {
+                try {
+                    var vector = embeddingService.embed(List.of(entry.getValue()))
+                            .vectors().get(0);
+                    if (persistVector(organizationId, entry.getKey(), entry.getValue(),
+                            model, vector)) {
+                        persisted++;
                     }
+                } catch (SemanticDecisionException ignored) {
+                    if (ProviderFailures.isOutOfCredit(ignored)) {
+                        log.warn("Embedding generation degraded for organization {} (no credit)",
+                                organizationId);
+                        break;
+                    }
+                    // this input stays unindexed; the other inputs were still persisted
                 }
             }
         }

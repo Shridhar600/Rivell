@@ -191,6 +191,7 @@ export const fixtureClauseFindingSummary = {
   proposedAction: 'USE_APPROVED_FALLBACK',
   proposedLanguageSource: 'APPROVED_DRAFTING',
   relatedPosition: false,
+  partlyWithinFallback: false,
   createdAt: '2026-09-25T09:01:10Z',
 }
 
@@ -208,6 +209,7 @@ export const fixtureAbsenceFindingSummary = {
   proposedAction: 'ADD_REQUIRED_PROVISION',
   proposedLanguageSource: 'NONE',
   relatedPosition: false,
+  partlyWithinFallback: false,
   createdAt: '2026-09-25T09:01:10Z',
 }
 
@@ -362,6 +364,42 @@ export const fixtureWithinFallbackFindingDetail = {
 }
 
 /**
+ * A within-fallback note whose fallback is only partly stated: one condition is met and one is not
+ * stated. It is a review item, not an accept-and-record note.
+ */
+export const fixturePartialFallbackFindingSummary = {
+  ...fixtureWithinFallbackFindingSummary,
+  id: 'f-19',
+  reviewClassification: 'REVIEW_REQUIRED',
+  partlyWithinFallback: true,
+}
+
+export const fixturePartialFallbackFindingDetail = {
+  ...fixtureWithinFallbackFindingDetail,
+  ...fixturePartialFallbackFindingSummary,
+  observationText:
+    'Partly within your fallback. The clause does not state: the right to suspend performance before termination. Check whether it is elsewhere in the contract.',
+  quality: {
+    ...fixtureWithinFallbackFindingDetail.quality,
+    fallbackConditionsOutcome: 'PARTIAL',
+    fallbackConditions: [
+      {
+        fallback: 1,
+        condition: 'a thirty (30) day cure period',
+        status: 'MET',
+        quote: "thirty (30) days' notice",
+      },
+      {
+        fallback: 1,
+        condition: 'the right to suspend performance before termination',
+        status: 'NOT_STATED',
+        quote: null,
+      },
+    ],
+  },
+}
+
+/**
  * A LOW informational note whose position governs a topic the clause only touches. It must read as
  * a related position, never as a breach of the clause itself.
  */
@@ -372,6 +410,7 @@ export const fixtureRelatedPositionFindingSummary = {
   issueFamily: 'POSITION_WALK_AWAY',
   observationKind: 'POSITION_WALK_AWAY',
   relatedPosition: true,
+  partlyWithinFallback: false,
 }
 
 export const fixtureRelatedPositionFindingDetail = {
@@ -515,7 +554,7 @@ export const fixtureNotCoveredFindingDetail = {
   ...fixturePolicyMissingFindingDetail,
   ...fixtureNotCoveredFindingSummary,
   observationText:
-    'No playbook position addresses this clause, and it reads as unusual for this kind of contract and against our side.',
+    'No playbook position covers this clause. It may be unusual for this kind of contract; check it.',
   quality: {
     sufficiency: 'POLICY_MISSING',
     verificationOutcome: null,

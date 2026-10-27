@@ -25,7 +25,7 @@ import com.rivell.workbench.platform.docx.DocxRedlineRenderer;
 import com.rivell.workbench.platform.docx.DocxRedlineVerifier;
 
 /**
- * DW-081 / DW-095: expensive document work (parse, redline render, redline verify) runs at most N
+ * Expensive document work (parse, redline render, redline verify) runs at most N
  * at a time. Extra callers wait for a bounded budget, then are refused instead of queueing.
  */
 class DocumentWorkLimiterTest {

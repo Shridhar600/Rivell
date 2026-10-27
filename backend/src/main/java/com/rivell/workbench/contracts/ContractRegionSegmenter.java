@@ -14,6 +14,9 @@ import java.util.UUID;
 public final class ContractRegionSegmenter {
 
     private static final int MAX_CONTAINER_WORDS = 12;
+    /** Words that mark a table as the signature block itself rather than contract content. */
+    private static final java.util.regex.Pattern SIGNATURE_CUE = java.util.regex.Pattern.compile(
+            "(?i)\\b(?:signature|signed|authori[sz]ed signatory)\\b|\\bby:");
     /** "SCHEDULE 1", also after a list number the heading text carries ("XXVI SCHEDULE 1"). */
     private static final java.util.regex.Pattern SCHEDULE_HEADING = java.util.regex.Pattern.compile(
             "(?s)(?:(?:\\d+(?:\\.\\d+)*|[IVXLC]+|[A-Z])[.):]?\\s+)?"
@@ -136,6 +139,18 @@ public final class ContractRegionSegmenter {
                     }
                 }
                 case TABLE, TEXT_BOX -> {
+                    if (node.nodeType() == DocumentNodeType.TABLE
+                            && currentHeading != null && isWitnessLine(currentHeading)
+                            && !SIGNATURE_CUE.matcher(tableText(node, nodes, byId)).find()) {
+                        // a table after the execution block is contract content (a schedule's
+                        // figures), not part of the signatures: it starts a region of its own,
+                        // so the review reads it instead of dropping it with the signature block
+                        closeCurrent(regions, currentHeading, currentTexts, currentText);
+                        currentHeading = node;
+                        currentTexts = new ArrayList<>();
+                        currentText = new StringBuilder(tableText(node, nodes, byId).strip());
+                        continue;
+                    }
                     var tableText = node.nodeType() == DocumentNodeType.TEXT_BOX
                             ? (node.text() == null ? "" : node.text())
                             : tableText(node, nodes, byId);
@@ -210,8 +225,12 @@ public final class ContractRegionSegmenter {
         if (heading == null) {
             return;
         }
+        // a table that starts its own region is titled by its first row
+        var headingText = heading.nodeType() == DocumentNodeType.TABLE
+                ? text.toString().lines().findFirst().orElse("Table").strip()
+                : heading.text();
         regions.add(new Region(
-                heading.id(), heading.text(), heading.numberingLabel(),
+                heading.id(), headingText, heading.numberingLabel(),
                 List.copyOf(textNodes), text.toString(), regionKind(heading, text)));
     }
 

@@ -56,6 +56,7 @@ import com.rivell.workbench.retrieval.EvidenceSufficiency;
 import com.rivell.workbench.retrieval.KnowledgePin;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 import com.rivell.workbench.retrieval.RetrievalProperties;
+import com.rivell.workbench.review.check.OmissionCheckExecutor;
 
 @SpringBootTest
 @Testcontainers
@@ -251,7 +252,8 @@ class ReviewCreationIT {
         assertThat(checks).extracting(ReviewPlanCheck::ordinal)
                 .containsExactlyElementsOf(
                         java.util.stream.IntStream.range(0, checks.size()).boxed().toList());
-        assertThat(checks).filteredOn(check -> check.family() == CheckFamily.CONCEPT_PRESENCE)
+        assertThat(checks).filteredOn(check -> check.family() == CheckFamily.CONCEPT_PRESENCE
+                        && !OmissionCheckExecutor.WALK_AWAY_ABSENCE_CHECK_KEY.equals(check.checkKey()))
                 .extracting(ReviewPlanCheck::concept, ReviewPlanCheck::expectation)
                 .containsExactlyInAnyOrder(
                         tuple(CoreConcepts.LIMITATION_OF_LIABILITY, CheckExpectation.REQUIRED),
@@ -333,8 +335,9 @@ class ReviewCreationIT {
 
         var checks = reviewRepository.findPlanChecks(organizationId, review.id());
         assertThat(checks).isNotEmpty();
-        assertThat(checks).allSatisfy(check ->
-                assertThat(check.family()).isEqualTo(CheckFamily.CLAUSE_REVIEW));
+        assertThat(checks).filteredOn(check -> !OmissionCheckExecutor.WALK_AWAY_ABSENCE_CHECK_KEY.equals(check.checkKey()))
+                .allSatisfy(check ->
+                        assertThat(check.family()).isEqualTo(CheckFamily.CLAUSE_REVIEW));
     }
 
     @Test
@@ -395,9 +398,9 @@ class ReviewCreationIT {
     }
 
     /**
-     * M10 / DW-020: review creation had no client-supplied key, so a retried creation produced a
-     * second review with a second frozen snapshot and a second full analysis. The retry must return
-     * the original review, and the key must never resolve another organisation's review.
+     * Review creation is idempotent only with a client-supplied key: a retried creation with the
+     * key returns the original review instead of producing a second review with a second frozen
+     * snapshot and a second full analysis. The key must never resolve another organisation's review.
      */
     @Test
     void aRetriedCreationWithTheSameClientRequestIdReturnsTheOriginalReview() {

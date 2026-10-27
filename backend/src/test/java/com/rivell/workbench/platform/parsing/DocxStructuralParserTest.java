@@ -378,7 +378,7 @@ class DocxStructuralParserTest {
     }
 
     /**
-     * DW-079: a relationship to a missing part makes docx4j refuse the whole package. Word opens
+     * A relationship to a missing part makes docx4j refuse the whole package. Word opens
      * such a file after offering to repair it, and Rivell's analysis must not 500 over it.
      */
     @Test

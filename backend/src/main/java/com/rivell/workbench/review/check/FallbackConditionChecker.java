@@ -10,22 +10,25 @@ import java.util.regex.Pattern;
 import com.rivell.workbench.intelligence.GenerativeReasoningService;
 import com.rivell.workbench.intelligence.ProviderFailures;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
+import com.rivell.workbench.review.FallbackCondition;
 import com.rivell.workbench.review.FallbackConditionSpecs;
 
 /**
  * Severity R3 lever P3: asks whether a clause judged "within a listed fallback" meets that fallback's
- * conditions, one by one (see {@link FallbackConditionSpecs}). Code owns the rule: a condition counts
- * as UNMET or MET only with a quote the clause or the contract facts hold; a listed fallback fails
- * on one UNMET; the clause leaves WITHIN_FALLBACK only when every listed fallback fails. UNKNOWN never
- * raises anything. Every failure becomes an outcome the executor keeps as "unchanged": the check never
- * throws and never becomes a finding by itself.
+ * conditions, one by one (see {@link FallbackConditionSpecs}). Code owns the rule: a condition is
+ * kept only when its source words are in the position text, and MET or UNMET only with a quote the
+ * clause or the contract facts hold. The fallback is PARTIAL when every listed fallback was reported
+ * and each has a grounded condition that is NOT_STATED or UNMET; a listed fallback left unreported
+ * keeps it WITHIN, and with no fallback listed it is never PARTIAL. The check reports; it never
+ * changes the category and every failure becomes an outcome the executor keeps as "unchanged".
  */
 final class FallbackConditionChecker {
 
     /** A condition's words are model-written and reach a user-visible note: cut them. */
     private static final int MAX_CONDITION_TEXT = 160;
     private static final Pattern LINE = Pattern.compile(
-            "^\\s*(\\d+)\\s*\\|\\s*(MET|UNMET|UNKNOWN)\\s*\\|(.*)\\|([^|]+?)\\s*$", Pattern.CASE_INSENSITIVE);
+            "^\\s*(\\d+)\\s*\\|\\s*(MET|UNMET|UNKNOWN)\\s*\\|(.*)\\|([^|]+)\\|([^|]+?)\\s*$",
+            Pattern.CASE_INSENSITIVE);
 
     /**
      * {@code listed}: TRUE when the position has fallback text, FALSE when it is structured and has
@@ -36,18 +39,16 @@ final class FallbackConditionChecker {
             Boolean listed, Integer fallbackCount, List<String> facts) {
     }
 
-    /** {@code fallback}: the fallback number the condition belongs to; {@code quote} is null unless the status holds one. */
-    record Condition(int fallback, String text, String status, String quote) {
-    }
-
     /**
-     * {@code outcome}: BEYOND (a quoted unmet condition fails every listed fallback) or WITHIN when the
-     * check answered; UNAVAILABLE, INVALID or OVER_BUDGET when it did not, and then there are no
-     * conditions. {@code executionId} links the generation when one ran.
+     * {@code outcome}: PARTIAL (every listed fallback was reported and each has a grounded condition
+     * that is not stated or unmet) or WITHIN; UNAVAILABLE, INVALID or OVER_BUDGET when the check did
+     * not answer, and then there are no conditions. {@code executionId} links the generation when one
+     * ran.
      */
-    record Result(String outcome, boolean fallbackListed, List<Condition> conditions, UUID executionId) {
+    record Result(String outcome, boolean fallbackListed, List<FallbackCondition> conditions,
+            UUID executionId) {
 
-        static final String BEYOND = "BEYOND";
+        static final String PARTIAL = FallbackConditionSpecs.PARTIAL;
         static final String WITHIN = "WITHIN";
         static final String UNAVAILABLE = "UNAVAILABLE";
         static final String INVALID = "INVALID";
@@ -61,26 +62,8 @@ final class FallbackConditionChecker {
             return new Result(outcome, false, List.of(), null);
         }
 
-        boolean raises() {
-            return BEYOND.equals(outcome);
-        }
-
         boolean answered() {
-            return BEYOND.equals(outcome) || WITHIN.equals(outcome);
-        }
-
-        /** The conditions of fallbacks that still hold which could not be shown either way. */
-        List<Condition> unknown() {
-            if (!WITHIN.equals(outcome)) {
-                return List.of();
-            }
-            var failed = conditions.stream()
-                    .filter(condition -> FallbackConditionSpecs.UNMET.equals(condition.status()))
-                    .map(Condition::fallback).collect(java.util.stream.Collectors.toSet());
-            return conditions.stream()
-                    .filter(condition -> FallbackConditionSpecs.UNKNOWN.equals(condition.status())
-                            && !failed.contains(condition.fallback()))
-                    .toList();
+            return PARTIAL.equals(outcome) || WITHIN.equals(outcome);
         }
     }
 
@@ -118,8 +101,8 @@ final class FallbackConditionChecker {
                 return new Result(Result.INVALID, listed, List.of(), execution.executionId());
             }
             var grouped = listed ? conditions : asSingleGroup(conditions);
-            return new Result(raises(grouped, listed ? ask.fallbackCount() : Integer.valueOf(1))
-                    ? Result.BEYOND : Result.WITHIN, listed, grouped, execution.executionId());
+            return new Result(listed ? outcome(grouped, ask.fallbackCount()) : Result.WITHIN,
+                    listed, grouped, execution.executionId());
         } catch (ProviderProtocolException e) {
             return Result.failed(Result.INVALID);
         } catch (RuntimeException e) {
@@ -128,65 +111,81 @@ final class FallbackConditionChecker {
         }
     }
 
-    /** MET and UNMET stand only with a quote the clause or the facts hold; otherwise the condition is UNKNOWN. */
-    private static List<Condition> parse(String lines, Ask ask) {
+    /**
+     * A condition is kept only when the fallback words it came from are in the position text. An
+     * UNKNOWN answer with those words is NOT_STATED; a MET or UNMET answer stands only with a quote
+     * the clause or the facts hold, and otherwise becomes UNKNOWN.
+     */
+    private static List<FallbackCondition> parse(String lines, Ask ask) {
         if (lines == null) {
             return List.of();
         }
         var haystack = ask.clause() + "\n" + String.join("\n", ask.facts());
-        var conditions = new ArrayList<Condition>();
+        var fallbackWords = fallbackLines(ask);
+        var conditions = new ArrayList<FallbackCondition>();
         for (var line : lines.split("\\R")) {
             var matcher = LINE.matcher(line);
             if (!matcher.matches()) {
                 continue;
             }
+            var fallback = Integer.parseInt(matcher.group(1));
+            if (ask.fallbackCount() != null && (fallback < 1 || fallback > ask.fallbackCount())) {
+                continue;
+            }
+            if (matcher.group(4).isBlank()
+                    || !LlmAdjudicator.quoted(matcher.group(5).strip(), fallbackWords)) {
+                continue;
+            }
             var status = matcher.group(2).toUpperCase(Locale.ROOT);
             var quote = matcher.group(3).strip();
             var quoted = !FallbackConditionSpecs.UNKNOWN.equals(status) && LlmAdjudicator.quoted(quote, haystack);
-            conditions.add(new Condition(Integer.parseInt(matcher.group(1)), capped(matcher.group(4).strip()),
-                    FallbackConditionSpecs.UNKNOWN.equals(status) || !quoted
-                            ? FallbackConditionSpecs.UNKNOWN : status,
+            conditions.add(new FallbackCondition(fallback, capped(matcher.group(4).strip()),
+                    FallbackConditionSpecs.UNKNOWN.equals(status) ? FallbackConditionSpecs.NOT_STATED
+                            : quoted ? status : FallbackConditionSpecs.UNKNOWN,
                     quoted ? quote : null));
         }
         return conditions;
     }
 
+    /**
+     * The words a condition may be grounded in: the position's "Fallback N:" lines when it lists
+     * fallbacks, so a condition cannot be lifted from the preferred or walk-away wording; the
+     * whole position for a prose position.
+     */
+    private static String fallbackLines(Ask ask) {
+        if (!Boolean.TRUE.equals(ask.listed())) {
+            return ask.position();
+        }
+        return String.join("\n", ask.position().lines()
+                .filter(line -> line.startsWith("Fallback")).toList());
+    }
+
     /** With no fallback listed there is one condition group, the preferred position, whatever the model numbered it. */
-    private static List<Condition> asSingleGroup(List<Condition> conditions) {
+    private static List<FallbackCondition> asSingleGroup(List<FallbackCondition> conditions) {
         return conditions.stream()
-                .map(condition -> new Condition(1, condition.text(), condition.status(), condition.quote()))
+                .map(condition -> new FallbackCondition(1, condition.condition(), condition.status(),
+                        condition.quote()))
                 .toList();
     }
 
     /**
-     * Every listed fallback must have failed: numbers 1..{@code expected} each need a quoted UNMET. A
-     * fallback the model did not report is not a failed fallback; numbers outside the range are ignored.
-     * For a prose position ({@code expected} null) the reported numbers must run from 1 without gaps.
+     * PARTIAL when every listed fallback was reported and each has a grounded condition that is
+     * NOT_STATED or UNMET; WITHIN otherwise. A fallback with no such shortfall still holds, and a
+     * listed fallback the model did not report is never counted as failed.
      */
-    private static boolean raises(List<Condition> conditions, Integer expected) {
-        var failed = new LinkedHashMap<Integer, Boolean>();
+    private static String outcome(List<FallbackCondition> conditions, Integer fallbackCount) {
+        var shortfall = new LinkedHashMap<Integer, Boolean>();
         for (var condition : conditions) {
-            failed.merge(condition.fallback(), FallbackConditionSpecs.UNMET.equals(condition.status()),
+            shortfall.merge(condition.fallback(),
+                    FallbackConditionSpecs.NOT_STATED.equals(condition.status())
+                            || FallbackConditionSpecs.UNMET.equals(condition.status()),
                     Boolean::logicalOr);
         }
-        if (expected == null) {
-            var numbers = failed.keySet().stream().sorted().toList();
-            for (var index = 0; index < numbers.size(); index++) {
-                if (numbers.get(index) != index + 1) {
-                    return false;
-                }
-            }
-            return !failed.isEmpty() && failed.values().stream().allMatch(Boolean::booleanValue);
+        if (fallbackCount != null && shortfall.size() < fallbackCount) {
+            return Result.WITHIN;
         }
-        if (expected < 1) {
-            return false;
-        }
-        for (var number = 1; number <= expected; number++) {
-            if (!Boolean.TRUE.equals(failed.get(number))) {
-                return false;
-            }
-        }
-        return true;
+        return !shortfall.isEmpty() && shortfall.values().stream().allMatch(Boolean::booleanValue)
+                ? Result.PARTIAL : Result.WITHIN;
     }
 
     private static String capped(String text) {

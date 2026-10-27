@@ -184,6 +184,49 @@ class InMemoryContractClauseSearchTest {
                 hit -> hit.headingNodeId().equals(bad.headingNodeId()) && hit.vectorRank() != null);
     }
 
+    /**
+     * The per-text fallback after a rejected batch is bounded: a provider that refuses the batch
+     * would otherwise be called once per clause, spending the review's budget on inputs that
+     * mostly share the batch's problem.
+     */
+    @Test
+    void aRejectedBatchRetriesOnlyABoundedNumberOfTextsAlone() {
+        var clauseTexts = java.util.stream.IntStream.range(0, 60)
+                .mapToObj(index -> "Fee clause " + index + " is due monthly against an invoice.")
+                .toList();
+        var clauses = clauseTexts.stream().map(InMemoryContractClauseSearchTest::clause).toList();
+        var perTextCalls = new java.util.concurrent.atomic.AtomicInteger();
+        var fake = new FakeEmbeddingProvider();
+        EmbeddingProvider rejectsBatches = new EmbeddingProvider() {
+            @Override
+            public String id() {
+                return FakeEmbeddingProvider.PROVIDER_ID;
+            }
+
+            @Override
+            public EmbeddingBatch embed(EmbeddingRequest request) {
+                if (request.inputs().size() > 1) {
+                    throw new com.rivell.workbench.intelligence.ProviderRejectedException(
+                            "batch rejected");
+                }
+                if (clauseTexts.contains(request.inputs().get(0))) {
+                    perTextCalls.incrementAndGet();
+                }
+                return fake.embed(request);
+            }
+        };
+        var search = new InMemoryContractClauseSearch(embeddings(rejectsBatches, true));
+
+        var result = search.search(List.of(DPA_POSITION), clauses, 60);
+
+        assertThat(perTextCalls).as("per-text fallback calls").hasValue(8);
+        assertThat(result.degradation()).containsExactly("VECTOR_LANE_PARTIAL");
+        assertThat(result.hits().getFirst())
+                .as("only the attempted texts reach the vector lane")
+                .hasSize(8)
+                .allSatisfy(hit -> assertThat(hit.vectorRank()).isNotNull());
+    }
+
     @Test
     void eachQueryGetsItsOwnRankingFromOneEmbeddingCallPerSide() {
         var calls = new java.util.concurrent.atomic.AtomicInteger();

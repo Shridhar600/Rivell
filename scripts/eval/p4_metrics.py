@@ -17,7 +17,7 @@ ADDRESSED = 0.5
 TRIAGE_FLAGGED = 0.5
 
 QUALITY_KEYS = ("route", "foundBy", "uncertaintyReason", "spottedSeverity",
-                "presenceProbability", "searchedClauses", "comparedClauses",
+                "presenceProbability", "absenceProbability", "searchedClauses", "comparedClauses",
                 "positionLabel", "jevCategory", "secondOpinionCategory", "levers",
                 "severityWithoutLevers", "secondOpinionQuote", "secondOpinionReason",
                 "categoryBeforeLevers", "wordingFitVerdict", "wordingFitReason",
@@ -124,7 +124,7 @@ def advisory_metrics(answer, nodes, clauses, findings):
 
 
 def _matches_issue(finding, issue):
-    # DW-069: the same whole-word label/reference rule score_contract uses, so the two agree on a
+    # the same whole-word label/reference rule score_contract uses, so the two agree on a
     # given finding. The omission lane counts only MISSING_POSITION findings; score_contract also
     # credits v1 MISSING_REQUIRED_CONCEPT absences (lane breadth, not a matcher difference).
     return absence_matches(finding, issue)
@@ -148,7 +148,8 @@ def omission_metrics(answer, findings):
             low += 1
         listed.append({"label": quality(finding).get("positionLabel") or "",
                        "severity": severity,
-                       "presence": quality(finding).get("presenceProbability"),
+                       "presence": (quality(finding).get("presenceProbability")
+                                    or quality(finding).get("absenceProbability")),
                        "matched": matched})
     return {"medium": medium, "low": low, "alarms": alarms, "list": listed}
 

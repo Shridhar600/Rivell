@@ -180,7 +180,7 @@ const SAFE_ERROR_MESSAGES: Record<number, string> = {
 
 export class RedlineApiError extends Error {
   readonly status: number
-  /** The server's typed failure code on a 409, when it sent one (RED-SRC). */
+  /** The server's typed failure code on a 409, when it sent one. */
   readonly failureCode: RedlineFailureCode | null
   /** A 503 from a saturated document-work limit carries this, unlike a storage outage. */
   readonly retryAfter: string | null

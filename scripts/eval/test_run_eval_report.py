@@ -106,7 +106,8 @@ class EngineMetaTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(run_eval.engine_meta(),
                              {"engine": "v2", "omissions": "false", "definitions": "false",
-                              "agreedWorseCategory": "true", "withinSplitMargin": "0.45",
+                              "agreedWorseCategory": "true", "r1NeedsCorroboration": "false",
+                              "withinSplitMargin": "0.45",
                               "fallbackConditions": "true"})
 
     def test_the_default_definitions_read_is_off(self):
@@ -121,7 +122,8 @@ class EngineMetaTest(unittest.TestCase):
                               "RIVELL_REVIEW_DEFINITIONS": "FALSE"}):
             self.assertEqual(run_eval.engine_meta(),
                              {"engine": "v2", "omissions": "true", "definitions": "false",
-                              "agreedWorseCategory": "true", "withinSplitMargin": "0.45",
+                              "agreedWorseCategory": "true", "r1NeedsCorroboration": "false",
+                              "withinSplitMargin": "0.45",
                               "fallbackConditions": "true"})
 
     def test_the_severity_r3_switches_come_from_the_environment(self):
@@ -131,6 +133,11 @@ class EngineMetaTest(unittest.TestCase):
             meta = run_eval.engine_meta()
         self.assertEqual((meta["agreedWorseCategory"], meta["withinSplitMargin"], meta["fallbackConditions"]),
                          ("false", "-1", "false"))
+
+    def test_the_r1_corroboration_switch_comes_from_the_environment(self):
+        with mock.patch.dict(os.environ,
+                             {"RIVELL_REVIEW_R1_NEEDS_CORROBORATION": "TRUE"}, clear=True):
+            self.assertEqual(run_eval.engine_meta()["r1NeedsCorroboration"], "true")
 
 
 class StoredEngineTest(unittest.TestCase):
@@ -151,7 +158,7 @@ class StoredEngineTest(unittest.TestCase):
 
 
 class ProbeRetryBudgetTest(unittest.TestCase):
-    """DW-059(4): a probe whose call only succeeds on a retry used to wait the provider's full
+    """A probe whose call only succeeds on a retry used to wait the provider's full
     2 s + 8 s + 30 s backoff before every check. A probe run gets a bounded budget."""
 
     def test_a_run_without_the_probe_keeps_the_provider_budget(self):
@@ -239,6 +246,14 @@ class ReportHeaderTest(unittest.TestCase):
         tuned = "\n".join(run_eval.header_lines(self.meta(withinSplitMargin="0.3")))
         self.assertIn("P2 margin 0.3", tuned)
 
+    def test_the_r1_corroboration_rule_is_named_only_when_on(self):
+        on = "\n".join(run_eval.header_lines(self.meta(r1NeedsCorroboration="true")))
+        self.assertIn("R1 needs corroboration", on)
+        off = "\n".join(run_eval.header_lines(self.meta(r1NeedsCorroboration="false")))
+        self.assertNotIn("R1", off)
+        old = "\n".join(run_eval.header_lines(self.meta()))
+        self.assertNotIn("R1", old)
+
     def test_issue_spotting_is_not_claimed_from_a_retired_switch(self):
         text = "\n".join(run_eval.header_lines(self.meta(engine="v2")))
         self.assertNotIn("issue spotting", text)
@@ -274,7 +289,7 @@ class ReportHeaderTest(unittest.TestCase):
             absenceCredit="label/reference whole-word"))
                          )
         self.assertIn("absence credit label/reference whole-word", text)
-        # a run made before DW-069 carries no marker
+        # a run scored before absence credit was recorded carries no marker
         self.assertNotIn("absence credit",
                          "\n".join(run_eval.header_lines(self.meta())))
 

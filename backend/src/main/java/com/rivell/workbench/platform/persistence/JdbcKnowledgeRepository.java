@@ -48,6 +48,7 @@ import com.rivell.workbench.knowledge.KnowledgeSourceNode;
 import com.rivell.workbench.knowledge.MergedCellRegion;
 import com.rivell.workbench.knowledge.PublicationAction;
 import com.rivell.workbench.knowledge.PublicationItem;
+import com.rivell.workbench.knowledge.PublishedCandidate;
 import com.rivell.workbench.knowledge.PublishedKnowledgeQuery;
 import com.rivell.workbench.knowledge.ReviewCategory;
 import com.rivell.workbench.knowledge.ReviewReason;
@@ -75,13 +76,13 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                          sha256, storage_key, declared_contract_types, contract_pack_key,
                          party_perspective, paper_source, jurisdiction, language, effective_from,
                          effective_to, manifest_note, ingest_status, parser_version, parse_warnings,
-                         artifact_assessment, created_at)
+                         artifact_assessment, created_at, client_request_id)
                         values (:id, :organizationId, :artifactType, :filename, :contentType,
                                 :sizeBytes, :sha256, :storageKey, :declaredContractTypes::jsonb,
                                 :contractPackKey, :partyPerspective, :paperSource, :jurisdiction,
                                 :language, :effectiveFrom, :effectiveTo, :manifestNote,
                                 :ingestStatus, :parserVersion, :parseWarnings::jsonb,
-                                :artifactAssessment::jsonb, :createdAt)
+                                :artifactAssessment::jsonb, :createdAt, :clientRequestId)
                         """)
                 .param("id", artifact.id())
                 .param("organizationId", artifact.organizationId())
@@ -105,6 +106,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 .param("parseWarnings", writeList(artifact.parseWarnings()))
                 .param("artifactAssessment", writeArtifactAssessment(artifact.assessment()))
                 .param("createdAt", Timestamp.from(artifact.createdAt()))
+                .param("clientRequestId", artifact.clientRequestId())
                 .update();
     }
 
@@ -223,6 +225,20 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    public Optional<KnowledgeArtifact> findByClientRequestId(
+            UUID organizationId, UUID clientRequestId) {
+        return jdbcClient.sql("""
+                        select * from knowledge_artifact
+                        where organization_id = :organizationId
+                          and client_request_id = :clientRequestId
+                        """)
+                .param("organizationId", organizationId)
+                .param("clientRequestId", clientRequestId)
+                .query(this::mapArtifact)
+                .optional();
+    }
+
+    @Override
     public List<KnowledgeArtifact> listArtifacts(UUID organizationId, Integer limit) {
         var sql = new StringBuilder("""
                 select * from knowledge_artifact
@@ -238,6 +254,16 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             client = client.param("limit", limit);
         }
         return client.query(this::mapArtifact).list();
+    }
+
+    @Override
+    public List<KnowledgeArtifact> listArtifactsForMigration() {
+        return jdbcClient.sql("""
+                        select * from knowledge_artifact
+                        order by organization_id, id
+                        """)
+                .query(this::mapArtifact)
+                .list();
     }
 
     @Override
@@ -464,6 +490,22 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    public List<ExtractionUnit> findUnits(Set<UUID> unitIds, UUID organizationId) {
+        if (unitIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbcClient.sql("""
+                        select u.* from knowledge_extraction_unit u
+                        join knowledge_artifact a on a.id = u.artifact_id
+                        where u.id = any(:unitIds) and a.organization_id = :organizationId
+                        """)
+                .param("unitIds", unitIds.toArray(UUID[]::new))
+                .param("organizationId", organizationId)
+                .query(this::mapUnit)
+                .list();
+    }
+
+    @Override
     public List<KnowledgeCandidate> loadCandidates(UUID artifactId, UUID organizationId) {
         return jdbcClient.sql("""
                         select c.* from knowledge_candidate c
@@ -674,18 +716,16 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         addScopeDimensions(conditions, params, query.contractPackKey(),
                 query.partyPerspective(), query.paperSource(), query.jurisdiction(),
                 query.effectiveOn());
-        conditions.add("""
-                not exists (
-                    select 1 from knowledge_publication_item sup_item
-                    join knowledge_publication sp
-                         on sp.id = sup_item.publication_id
-                        and sp.organization_id = c.organization_id
-                    where sup_item.organization_id = c.organization_id
-                      and sup_item.action = 'SUPERSEDE'
-                      and sup_item.superseded_candidate_id = c.id
-                      and sp.publication_number <= :asOf)
-                """);
-        params.put("asOf", query.asOfPublicationNumber());
+        addPinVisibility(conditions, params, query.asOfPublicationNumber());
+        if (query.afterCreatedAt() != null) {
+            // Keyset resume on the same total order as the ORDER BY, bound at full TIMESTAMPTZ
+            // precision: a truncated position would skip rows sharing that millisecond.
+            conditions.add("(c.created_at, c.id) < (cast(:afterCreatedAt as timestamptz),"
+                    + " cast(:afterId as uuid))");
+            params.put("afterCreatedAt",
+                    OffsetDateTime.ofInstant(query.afterCreatedAt(), ZoneOffset.UTC));
+            params.put("afterId", query.afterId().toString());
+        }
         // a candidate has at most one ADD publication (DB-enforced), so this join
         // cannot fan out; it both constrains pin visibility and exposes the
         // publication identity for provenance
@@ -734,6 +774,52 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
     }
 
     @Override
+    public List<PublishedCandidate> findPublishedPositionsForArtifacts(
+            UUID organizationId, long asOfPublicationNumber,
+            java.util.Collection<UUID> artifactIds, String contractPackKey,
+            String partyPerspective, String paperSource, String jurisdiction,
+            LocalDate effectiveOn) {
+        if (asOfPublicationNumber < 1 || artifactIds == null || artifactIds.isEmpty()) {
+            return List.of();
+        }
+        var conditions = new ArrayList<String>();
+        var params = new HashMap<String, Object>();
+        conditions.add("c.organization_id = :organizationId");
+        params.put("organizationId", organizationId);
+        conditions.add("c.review_status = 'PUBLISHED'");
+        conditions.add("c.candidate_type = 'PLAYBOOK_RULE'");
+        conditions.add("c.artifact_id = any(:artifactIds)");
+        params.put("artifactIds", artifactIds.toArray(UUID[]::new));
+        addScopeDimensions(conditions, params, contractPackKey, partyPerspective, paperSource,
+                jurisdiction, effectiveOn);
+        addPinVisibility(conditions, params, asOfPublicationNumber);
+        var sql = """
+                select c.*, pp.id as publication_id, pp.publication_number as publication_number
+                from knowledge_candidate c
+                join knowledge_publication_item add_item
+                  on add_item.candidate_id = c.id
+                 and add_item.action = 'ADD'
+                 and add_item.organization_id = c.organization_id
+                join knowledge_publication pp
+                  on pp.id = add_item.publication_id
+                 and pp.organization_id = c.organization_id
+                 and pp.publication_number <= :asOf
+                where %s
+                order by c.artifact_id, c.created_at, c.id
+                """.formatted(String.join(" and ", conditions));
+        var statement = jdbcClient.sql(sql);
+        for (var entry : params.entrySet()) {
+            statement = statement.param(entry.getKey(), entry.getValue());
+        }
+        return statement
+                .query((rs, rowNum) -> new com.rivell.workbench.knowledge.PublishedCandidate(
+                        mapCandidate(rs, rowNum),
+                        rs.getObject("publication_id", UUID.class),
+                        rs.getLong("publication_number")))
+                .list();
+    }
+
+    @Override
     public List<ApplicableKnowledge> findApplicableKnowledge(ApplicableKnowledgeQuery query) {
         if (query.asOfPublicationNumber() < 1) {
             return List.of();
@@ -749,18 +835,7 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         addScopeDimensions(conditions, params, query.contractPackKey(),
                 query.partyPerspective(), query.paperSource(), query.jurisdiction(),
                 query.effectiveOn());
-        conditions.add("""
-                not exists (
-                    select 1 from knowledge_publication_item sup_item
-                    join knowledge_publication sp
-                         on sp.id = sup_item.publication_id
-                        and sp.organization_id = c.organization_id
-                    where sup_item.organization_id = c.organization_id
-                      and sup_item.action = 'SUPERSEDE'
-                      and sup_item.superseded_candidate_id = c.id
-                      and sp.publication_number <= :asOf)
-                """);
-        params.put("asOf", query.asOfPublicationNumber());
+        addPinVisibility(conditions, params, query.asOfPublicationNumber());
         var sql = """
                 select a.id as artifact_id, a.artifact_type,
                        coalesce(a.document_title, a.filename) as name,
@@ -867,6 +942,26 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         }
     }
 
+    /**
+     * A candidate is visible at a publication pin when a publication at or before the pin added
+     * it and no publication at or before the pin superseded it. Every published read shares the
+     * rule, so coverage and retrieval cannot disagree about what is published.
+     */
+    private static void addPinVisibility(
+            List<String> conditions, HashMap<String, Object> params, long asOf) {
+        conditions.add("""
+                not exists (
+                    select 1 from knowledge_publication_item sup_item
+                    join knowledge_publication sp
+                         on sp.id = sup_item.publication_id
+                        and sp.organization_id = c.organization_id
+                    where sup_item.organization_id = c.organization_id
+                      and sup_item.action = 'SUPERSEDE'
+                      and sup_item.superseded_candidate_id = c.id
+                      and sp.publication_number <= :asOf)
+                """);
+        params.put("asOf", asOf);
+    }
 
     @Override
     @Transactional
@@ -1050,7 +1145,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                 readList(rs.getString("parse_warnings")),
                 readArtifactAssessment(rs.getString("artifact_assessment")),
                 instant(rs, "created_at"),
-                rs.getString("document_title"));
+                rs.getString("document_title"),
+                uuid(rs, "client_request_id"));
     }
 
     private KnowledgeSourceNode mapNode(ResultSet rs, int rowNum) throws SQLException {

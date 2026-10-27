@@ -29,11 +29,21 @@ public interface KnowledgeRepository {
 
     Optional<KnowledgeArtifact> findArtifact(UUID artifactId, UUID organizationId);
 
+    /** The artifact one client request key already produced, when a retry repeats that request. */
+    Optional<KnowledgeArtifact> findByClientRequestId(UUID organizationId, UUID clientRequestId);
+
     /**
      * Newest-first artifact list. {@code limit} bounds the read; null keeps the
      * unbounded behaviour existing callers rely on.
      */
     List<KnowledgeArtifact> listArtifacts(UUID organizationId, Integer limit);
+
+    /**
+     * Every stored artifact, across organizations, for the one-time document-title
+     * re-derivation. The derivation reads each artifact's stored nodes, so this read is
+     * intentionally not organization-scoped.
+     */
+    List<KnowledgeArtifact> listArtifactsForMigration();
 
     Optional<KnowledgeSource> findSource(UUID artifactId, UUID organizationId);
 
@@ -48,6 +58,9 @@ public interface KnowledgeRepository {
     List<ExtractionUnit> loadUnits(UUID artifactId, UUID organizationId);
 
     Optional<ExtractionUnit> findUnit(UUID unitId, UUID organizationId);
+
+    /** Every named unit that belongs to the organization: one read for a bundle's provenance. */
+    List<ExtractionUnit> findUnits(Set<UUID> unitIds, UUID organizationId);
 
     /**
      * Records a person's record-kind correction on one part, once: false when the part already
@@ -86,7 +99,7 @@ public interface KnowledgeRepository {
     Optional<KnowledgeCandidate> findCandidate(UUID candidateId, UUID organizationId);
 
     /**
-     * Human concept correction (DW-017); pre-publication only. Persists the
+     * Human concept correction; pre-publication only. Persists the
      * correction, the resulting review status (an APPROVED candidate demotes to
      * EDITED for re-approval), and the recomputed analysis outcome. Returns false
      * when the expected status no longer holds (concurrent transition).
@@ -127,6 +140,18 @@ public interface KnowledgeRepository {
     List<KnowledgeCandidate> findPublishedCandidates(UUID organizationId);
 
     List<PublishedCandidate> findPublishedCandidatesAsOf(PublishedKnowledgeQuery query);
+
+    /**
+     * Every published playbook position of the given artifacts visible at the pinned publication,
+     * after the scope dimensions other than contract type. The position's own contract-type scope
+     * is left to the caller: coverage must be able to show an out-of-scope position rather than
+     * drop it. Retrieval never uses this read.
+     */
+    List<PublishedCandidate> findPublishedPositionsForArtifacts(
+            UUID organizationId, long asOfPublicationNumber,
+            java.util.Collection<UUID> artifactIds, String contractPackKey,
+            String partyPerspective, String paperSource, String jurisdiction,
+            java.time.LocalDate effectiveOn);
 
     /**
      * The published playbooks and clause libraries that apply to a declared context, by the same

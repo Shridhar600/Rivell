@@ -12,5 +12,6 @@ class ReviewEngineDefaultsTest {
 
         assertThat(properties.omissions()).isFalse();
         assertThat(properties.definitions()).isFalse();
+        assertThat(properties.walkAwayAbsence().enabled()).isTrue();
     }
 }

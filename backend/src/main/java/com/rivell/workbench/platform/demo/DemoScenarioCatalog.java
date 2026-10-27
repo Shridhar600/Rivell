@@ -74,7 +74,7 @@ public final class DemoScenarioCatalog {
                     "finalized with INSERTs, then a human semantics correction drifts the digest; "
                             + "redline FAILED APPROVED_SEMANTICS_DRIFT with no artifact",
                     "workspace read-only; redline failed; download no",
-                    "deterministic failure by design, not a retryable-transient claim (DW-048)"),
+                    "deterministic failure by design, not a retryable-transient claim"),
             review(R09_RETRY_SUCCEEDED, "Initech NDA - Retry succeeded",
                     "Initech NDA - Retry succeeded.docx",
                     "R08 path, cause repaired by reverting the correction, retry attempt 2 "

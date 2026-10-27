@@ -70,7 +70,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<ErrorResponse> badRequest(IllegalArgumentException e) {
         // The message is the exception's own, and several of them name identifiers, classes or
-        // internal locations. The client gets a code-owned sentence; the type is all it needs (DW-094).
+        // internal locations. The client gets a code-owned sentence; the type is all it needs.
         return error(HttpStatus.BAD_REQUEST, "400", "Request not accepted",
                 "Rivell could not accept this request. Check the values and try again.");
     }

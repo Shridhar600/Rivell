@@ -406,11 +406,11 @@ public class ContractEnrichmentIT {
     }
 
     /**
-     * DW-051: clause order is document order. The clause read had no ORDER BY, so the order a
-     * contract's clauses came back in depended on physical row layout: the semantics API listed
-     * them in an arbitrary order that could change after any update, and the demo's clause picker
-     * chose a different clause from run to run. This asserts the order is the one the document
-     * itself has, which is the only order that means anything for a contract.
+     * Clause order is document order. Without an ORDER BY the order a contract's clauses come
+     * back in depends on physical row layout: the semantics API lists them in an arbitrary order
+     * that can change after any update, and the demo's clause picker can choose a different clause
+     * from run to run. This asserts the order is the one the document itself has, which is
+     * the only order that means anything for a contract.
      */
     @Test
     void clausesAreReadInDocumentOrder() throws Exception {
@@ -904,7 +904,7 @@ public class ContractEnrichmentIT {
     }
 
     /**
-     * DW-080: a contract that defines the same term twice (recitals and definitions) must keep
+     * A contract that defines the same term twice (recitals and definitions) must keep
      * and flag both definitions. The old per-term unique key failed the whole analysis instead.
      */
     @Test

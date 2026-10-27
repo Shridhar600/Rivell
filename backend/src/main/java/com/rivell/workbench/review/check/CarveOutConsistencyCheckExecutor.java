@@ -30,7 +30,7 @@ import com.rivell.workbench.review.SignalType;
  */
 public final class CarveOutConsistencyCheckExecutor implements ReviewCheckExecutor {
 
-    /** Uncalibrated fail-closed bands (DW-007); see LiabilityCapCheckExecutor. */
+    /** Uncalibrated fail-closed bands; see LiabilityCapCheckExecutor. */
     private static final double TRUE_BAND = 0.6;
     private static final int MAX_COUNTERPART_CHARS = 6000;
 

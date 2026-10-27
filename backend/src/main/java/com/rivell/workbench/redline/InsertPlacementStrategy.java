@@ -12,7 +12,7 @@ import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.taxonomy.CoreConcepts;
 
 /**
- * Deterministic DW-030 INSERT placement (document position only, never legal substance):
+ * Deterministic INSERT placement (document position only, never legal substance):
  * code-owned ordered anchor concepts, then a bounded structural fallback. Versioned by
  * {@link #VERSION}; never uses a model, knowledge, or fuzzy text matching.
  */

@@ -626,6 +626,33 @@
   font-weight: 500;
   text-align: center;
 }
+/* The fallback's own conditions, each with the words the check rests on. */
+.rv-ws-conds {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rv-ws-conds li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--side);
+}
+.rv-ws-cond-status {
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 500;
+}
+.rv-ws-cond-text {
+  color: var(--text);
+  font-size: 12.5px;
+}
 .rv-ws-lifecycle {
   max-width: 720px;
   margin: 16px auto 0;

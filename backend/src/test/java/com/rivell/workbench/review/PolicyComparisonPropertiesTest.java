@@ -7,7 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.Test;
 
 /**
- * DW-071 item 2: a flag threshold below the fixed 0.5 "addresses" line would let a position be
+ * A flag threshold below the fixed 0.5 "addresses" line would let a position be
  * flagged and yet count as not addressing its clause, so one issue could yield both a deviation
  * finding and an omission. The configuration must refuse it at startup instead of silently
  * changing the meaning of a judgement.

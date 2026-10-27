@@ -45,6 +45,8 @@ import {
   fixtureOmissionUnsureFindingSummary,
   fixtureSearchFoundFindingDetail,
   fixtureNoApproverConditionFindingDetail,
+  fixturePartialFallbackFindingDetail,
+  fixturePartialFallbackFindingSummary,
   fixtureSearchFoundFindingSummary,
 } from './testFixtures'
 import { fixtureHumanReview } from './workflowFixtures'
@@ -80,6 +82,7 @@ const detailById: Record<string, unknown> = {
   'f-16': fixtureOmissionUnsureFindingDetail,
   'f-17': fixtureSearchFoundFindingDetail,
   'f-18': fixtureNoApproverConditionFindingDetail,
+  'f-19': fixturePartialFallbackFindingDetail,
 }
 
 /**
@@ -555,7 +558,7 @@ describe('finding detail', () => {
     const pane = within(detailPane())
     expect(pane.getAllByText(/Unusual clause, not covered by your playbook/).length).toBeGreaterThan(0)
     expect(pane.queryByText('Policy unavailable')).not.toBeInTheDocument()
-    expect(pane.getByText(/No playbook position addresses this clause/)).toBeInTheDocument()
+    expect(pane.getByText(/No playbook position covers this clause/)).toBeInTheDocument()
     expect(pane.getByText(/Confidence: high/)).toBeInTheDocument()
     expect(pane.queryByText(/90%/)).not.toBeInTheDocument()
     // The list names the same kind, not the generic policy-unavailable family.
@@ -664,7 +667,34 @@ describe('position findings', () => {
     await findDetailTitle('6. Limitation of Liability')
     const pane = within(detailPane())
     expect(pane.getByText(/note, not a problem/i)).toBeInTheDocument()
-    expect(pane.getByText(/accept and record/i)).toBeInTheDocument()
+    expect(pane.getByText(/record your reason/i)).toBeInTheDocument()
+  })
+
+  it('lists a fallback condition the clause does not state', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-19', {
+      findings: listWith(fixturePartialFallbackFindingSummary),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    const pane = within(detailPane())
+    // The finding is only partly within its fallback, and says so in the list, the header and Rivell found.
+    expect(
+      await (await findFindingsList()).findByRole('option', { name: /Partly within your fallback/ }),
+    ).toBeInTheDocument()
+    expect(detailPane().querySelector('.rv-ws-kicker')).toHaveTextContent(
+      'Partly within your fallback',
+    )
+    expect(section('Rivell found')).toHaveTextContent('Partly within your fallback')
+    // The conditions are the finding's substance, so they sit under the gap, not inside Details.
+    const conditions = pane.getByTestId('fallback-conditions')
+    expect(conditions).toBeVisible()
+    expect(conditions.closest('details')).toBeNull()
+    expect(conditions).toHaveTextContent('Stated')
+    expect(conditions).toHaveTextContent('a thirty (30) day cure period')
+    expect(conditions).toHaveTextContent('Not stated')
+    expect(conditions).toHaveTextContent('the right to suspend performance before termination')
+    // a partly stated fallback is not a note to accept and record
+    expect(pane.queryByText(/accept and record/i)).not.toBeInTheDocument()
   })
 
   it('reads a secondary-topic position as related guidance, not a breach', async () => {
@@ -684,7 +714,7 @@ describe('position findings', () => {
     ).toBeInTheDocument()
   })
 
-  it('says approval is needed and shows the escalate-if condition only when a typed rule applies', async () => {
+  it('names the approver and the departure only when a typed rule applies', async () => {
     renderWorkspace('/reviews/c1/analysis/r-1?finding=f-8', {
       findings: listWith({
         ...fixtureWithinFallbackFindingSummary,
@@ -700,14 +730,31 @@ describe('position findings', () => {
     // The note itself is visible before the decision bar, carries the approver, its source and
     // the rule's own condition, not only the comparison grid.
     expect(note).toBeVisible()
-    expect(note).toHaveTextContent('Approval is needed.')
     expect(note).toHaveTextContent(
-      'Commercial Manager approves this fallback, from the approval matrix.',
+      'Approval required: Commercial Manager for this fallback (from the approval matrix).',
     )
-    expect(note).toHaveTextContent('Escalate if: Uncapped liability or consequential damages.')
+    expect(note).toHaveTextContent('Approval applies if: Uncapped liability or consequential damages.')
     expect(note).toHaveTextContent('The entry names General Counsel for this.')
     // the rule's condition and the playbook trigger are the same words; they are shown once
     expect(within(detailPane()).queryByText(/Escalate when:/)).toBeNull()
+  })
+
+  it('names a clause beyond the fallback as the departure a fallback rule covers', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1?finding=f-1', {
+      findingDetailResponse: () =>
+        jsonResponse(
+          envelope({
+            ...fixtureClauseFindingDetail,
+            reviewClassification: 'REVIEW_REQUIRED',
+            quality: { ...fixtureClauseFindingDetail.quality, ...approvalQuality },
+          }),
+        ),
+    })
+
+    await findDetailTitle('6. Limitation of Liability')
+    expect(detailPane().querySelector('.rv-ws-note--approval')).toHaveTextContent(
+      'Approval required: General Counsel for a clause beyond the fallback (stated on this entry).',
+    )
   })
 
   const approvalQuality = {
@@ -1098,6 +1145,75 @@ describe('finding evidence amendment', () => {
       await screen.findByText(/No findings for this contract version/),
     ).toBeInTheDocument()
     expect(api.requests.filter((r) => r.url.includes('/findings?')).length).toBeGreaterThan(0)
+  })
+
+  it('shows what the playbook coverage compared, searched, did not compare and left out of scope', async () => {
+    renderWorkspace('/reviews/c1/analysis/r-1', {
+      reviewSummary: {
+        ...summaryWithPlaybooks(),
+        activeRun: {
+          ...fixtureCompletedReviewSummary.activeRun,
+          playbookCoverage: [
+            {
+              positionCandidateId: 'p-1',
+              label: 'Limitation of liability',
+              code: 'L-1',
+              topic: 'LIMITATION_OF_LIABILITY',
+              state: 'COMPARED',
+              verdict: 'PARTLY_WITHIN_FALLBACK',
+              clauseHeadingNodeId: 'h-1',
+              findingId: 'f-7',
+              reason: null,
+            },
+            {
+              positionCandidateId: 'p-2',
+              label: 'Termination for convenience',
+              code: 'T-11',
+              topic: 'TERM',
+              state: 'NOT_FOUND',
+              verdict: null,
+              clauseHeadingNodeId: null,
+              findingId: 'f-15',
+              reason: null,
+            },
+            {
+              positionCandidateId: 'p-3',
+              label: 'Audit rights',
+              code: 'A-4',
+              topic: 'AUDIT',
+              state: 'NOT_COMPARED',
+              verdict: null,
+              clauseHeadingNodeId: null,
+              findingId: null,
+              reason: 'NOT_CHECKED',
+            },
+            {
+              positionCandidateId: 'p-4',
+              label: 'Data export',
+              code: 'D-2',
+              topic: 'DATA_PROTECTION',
+              state: 'OUT_OF_SCOPE',
+              verdict: null,
+              clauseHeadingNodeId: null,
+              findingId: null,
+              reason: null,
+            },
+          ],
+        },
+      },
+    })
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Review coverage and notes' }))
+    const sheet = within(screen.getByRole('dialog', { name: 'Review notes' }))
+    expect(
+      await sheet.findByRole('button', { name: /Playbook coverage/ }),
+    ).toBeInTheDocument()
+    expect(sheet.getByText('Compared')).toBeInTheDocument()
+    expect(sheet.getByText('Partly within fallback')).toBeInTheDocument()
+    expect(sheet.getByText('Not found in this contract')).toBeInTheDocument()
+    expect(sheet.getByText('Not compared')).toBeInTheDocument()
+    expect(sheet.getByText('Not checked')).toBeInTheDocument()
+    expect(sheet.getByText('Out of scope')).toBeInTheDocument()
   })
 })
 

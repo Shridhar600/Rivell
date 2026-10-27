@@ -49,9 +49,10 @@ export interface KnowledgeCatalogState {
 /**
  * Published Knowledge for the read surfaces.
  *
- * There is no per-artifact published projection yet (GAP-B), so this reads the three real lists
+ * There is no per-artifact published projection yet, so this reads the three real lists
  * and joins them by id in `buildCatalog`: sources, each source's candidates, and publications.
- * That is one request per extracted source. It is correct, and it is the cost GAP-B removes.
+ * That is one request per extracted source. It is correct, and it is the cost a per-artifact
+ * projection would remove.
  */
 export function useKnowledgeCatalog(): KnowledgeCatalogState {
   const artifacts = useQuery({

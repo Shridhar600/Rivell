@@ -147,6 +147,7 @@ describe('applicability scope presentation', () => {
       jurisdiction: 'US',
       effectiveFrom: '2026-01-01',
       effectiveTo: '2026-12-31',
+      sourceContractTypes: [],
     }
 
     expect(
@@ -171,6 +172,7 @@ describe('applicability scope presentation', () => {
       jurisdiction: null,
       effectiveFrom: null,
       effectiveTo: null,
+      sourceContractTypes: [],
     }
 
     expect(applicabilityDimensions(scope)).toEqual([
@@ -197,6 +199,7 @@ describe('applicability scope presentation', () => {
       jurisdiction: 'DE',
       effectiveFrom: null,
       effectiveTo: '2025-06-30',
+      sourceContractTypes: [],
     }
     expect(applicabilityDimensions(partial)).toEqual([
       { key: 'contractTypes', label: 'Contract types', value: 'Services agreement' },

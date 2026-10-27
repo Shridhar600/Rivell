@@ -40,10 +40,14 @@ class EvidenceIndexDimensionGuardTest {
                         List.copyOf(vectors), "oversize-model", new TokenUsage(10, 1));
             }
         };
+        return embeddingService(oversized);
+    }
+
+    private static EmbeddingService embeddingService(EmbeddingProvider provider) {
         var properties = new EmbeddingProperties("openai-compatible",
                 "http://localhost", "key", "oversize-model", null, 64, null, null);
         return new EmbeddingService(
-                (EmbeddingProviderRegistry) id -> Optional.of(oversized),
+                (EmbeddingProviderRegistry) id -> Optional.of(provider),
                 properties, Clock.systemUTC());
     }
 
@@ -121,6 +125,36 @@ class EvidenceIndexDimensionGuardTest {
                 onCreateIndex.accept(dims);
             }
         };
+    }
+
+    @Test
+    void aTimedOutBatchIsNotRetriedOncePerText() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        EmbeddingProvider timingOut = new EmbeddingProvider() {
+            @Override
+            public String id() {
+                return "openai-compatible";
+            }
+
+            @Override
+            public EmbeddingBatch embed(EmbeddingRequest request) {
+                calls.incrementAndGet();
+                throw new com.rivell.workbench.intelligence.ProviderTimeoutException(
+                        "Embedding provider did not respond in time");
+            }
+        };
+        var service = new EvidenceIndexService(null, embeddingService(timingOut),
+                recordingRepository(new java.util.ArrayList<>()),
+                new RetrievalProperties(true, null, 20, 10, 20, 2, "", 100));
+
+        var persisted = service.embedBatch(UUID.randomUUID(), Map.of(
+                UUID.randomUUID(), "text one",
+                UUID.randomUUID(), "text two",
+                UUID.randomUUID(), "text three"));
+
+        assertThat(persisted).isZero();
+        // a timeout is not about one input: the batch call is the only call it costs
+        assertThat(calls).hasValue(1);
     }
 
     @Test

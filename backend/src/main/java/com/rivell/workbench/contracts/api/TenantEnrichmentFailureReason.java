@@ -3,7 +3,7 @@ package com.rivell.workbench.contracts.api;
 import com.rivell.workbench.contracts.EnrichmentFailureReason;
 
 /**
- * The failure classification a tenant is allowed to see (M10A.1 / DW-041).
+ * The failure classification a tenant is allowed to see.
  *
  * <p>{@link EnrichmentFailureReason} is an operator-facing diagnosis: it distinguishes a missing
  * credential from a refused request from a timeout, because that is exactly what an operator needs
@@ -23,10 +23,10 @@ import com.rivell.workbench.contracts.EnrichmentFailureReason;
  * a re-run, so the information that would decide recoverability is exactly the operator reason this
  * projection withholds. The client is therefore told what happened and nothing more — no cause, no
  * timeframe, no outcome, and no claim that waiting will help. A recovery classification for tenants
- * is an open product decision: it is recorded as DW-041 escalation 1, which is why
- * <b>DW-041 remains PARTIALLY RESOLVED</b> — the credential and quota disclosure this type closes is
- * closed, and the recovery question is not. Do not "helpfully" add a retryable flag here; see that
- * escalation for the disclosure cost of splitting this class.
+ * is an open product decision, separate from the question this type answers: the credential and
+ * quota reasons no longer reach the tenant, and the recovery question remains open. Do not
+ * "helpfully" add a retryable flag here; splitting this class to answer it has its own disclosure
+ * cost.
  *
  * <p>The mapping is a switch with no default, so adding a reason to {@link EnrichmentFailureReason}
  * fails compilation until someone decides whether a tenant may see it. That is the point.

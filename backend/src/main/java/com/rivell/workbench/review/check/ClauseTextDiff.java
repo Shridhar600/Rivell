@@ -19,6 +19,7 @@ record ClauseTextDiff(List<String> removed, List<String> added) {
     private static final Pattern LABEL =
             Pattern.compile("^\\s*(?:\\(?[0-9]+(?:\\.[0-9]+)*\\)?|\\(?[A-Za-z]\\)|[A-Z]\\.|[0-9]+\\.[A-Z]\\.)\\s+");
     private static final Pattern WORD = Pattern.compile("[A-Za-z]+");
+    private static final Pattern KEY_WORD = Pattern.compile("[a-z0-9]+");
     private static final int MIN_WORDS = 3;
 
     static ClauseTextDiff of(String original, String rewrite) {
@@ -50,7 +51,7 @@ record ClauseTextDiff(List<String> removed, List<String> added) {
     /** Lower-case words and numbers only, so quotes, spacing and punctuation do not count. */
     static String key(String sentence) {
         var words = new ArrayList<String>();
-        var matcher = Pattern.compile("[a-z0-9]+").matcher(
+        var matcher = KEY_WORD.matcher(
                 Normalizer.normalize(sentence, Normalizer.Form.NFKC).toLowerCase(Locale.ROOT));
         while (matcher.find()) {
             words.add(matcher.group());

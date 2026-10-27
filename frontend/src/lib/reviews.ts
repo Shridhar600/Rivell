@@ -4,6 +4,7 @@ import type {
   FindingClaim,
   FindingDetail,
   FindingSummary,
+  PlaybookCoverageEntry,
   PlaybookUsed,
   ReviewCoverage,
   ReviewFailure,
@@ -11,6 +12,7 @@ import type {
   FindingQuality,
 } from '../api/reviews'
 import { humanizeCode } from './domainLabels'
+import { CONTRACT_TYPE_LABELS } from './contractSemantics'
 import type { ConceptLabel } from '../api/taxonomy'
 
 const REVIEW_STATUS_LABELS: Record<string, string> = {
@@ -128,6 +130,17 @@ const COMPARISON_CATEGORY_LABELS: Record<string, string> = {
 
 export function comparisonCategoryLabel(category: string): string {
   return COMPARISON_CATEGORY_LABELS[category] ?? humanizeCode(category)
+}
+
+const FALLBACK_CONDITION_STATUS_LABELS: Record<string, string> = {
+  MET: 'Stated',
+  UNMET: 'Not met',
+  NOT_STATED: 'Not stated',
+  UNKNOWN: 'Could not check',
+}
+
+export function fallbackConditionStatusLabel(status: string): string {
+  return FALLBACK_CONDITION_STATUS_LABELS[status] ?? humanizeCode(status)
 }
 
 /**
@@ -352,6 +365,55 @@ export function coverageLimitationSummary(
   return `Rivell did not check: ${topics.join(', ')}`
 }
 
+const PLAYBOOK_COVERAGE_STATE_LABELS: Record<string, string> = {
+  COMPARED: 'Compared',
+  NOT_FOUND: 'Not found in this contract',
+  NOT_COMPARED: 'Not compared',
+  OUT_OF_SCOPE: 'Out of scope',
+}
+
+export function playbookCoverageStateLabel(state: string): string {
+  return PLAYBOOK_COVERAGE_STATE_LABELS[state] ?? 'Not compared'
+}
+
+const PLAYBOOK_COVERAGE_VERDICT_LABELS: Record<string, string> = {
+  MEETS_PREFERRED: 'Meets preferred',
+  WITHIN_FALLBACK: 'Within fallback',
+  PARTLY_WITHIN_FALLBACK: 'Partly within fallback',
+  BEYOND_FALLBACK: 'Beyond fallback',
+  WALK_AWAY: 'Walk-away',
+  UNCLEAR: 'Unclear',
+}
+
+export function playbookCoverageVerdictLabel(verdict: string | null): string | null {
+  if (!verdict) return null
+  return PLAYBOOK_COVERAGE_VERDICT_LABELS[verdict] ?? null
+}
+
+const PLAYBOOK_COVERAGE_REASON_LABELS: Record<string, string> = {
+  NOT_CHECKED: 'Not checked',
+  FOUND_NOT_JUDGED: 'Found in a clause, not judged',
+  CHECK_DID_NOT_COMPLETE: 'A check did not complete',
+}
+
+export function playbookCoverageReasonLabel(reason: string | null): string {
+  if (!reason) return 'Not checked'
+  return PLAYBOOK_COVERAGE_REASON_LABELS[reason] ?? 'Not checked'
+}
+
+/**
+ * The one-line count of what the run did with its playbook positions. It names every state,
+ * including zero, so a reader cannot read "0 not found" as "everything was checked".
+ */
+export function playbookCoverageSummary(
+  entries: readonly PlaybookCoverageEntry[],
+): string {
+  const count = (state: PlaybookCoverageEntry['state']) =>
+    entries.filter((entry) => entry.state === state).length
+  const noun = entries.length === 1 ? 'position' : 'positions'
+  return `${entries.length} ${noun}: ${count('COMPARED')} compared, ${count('NOT_FOUND')} not found, ${count('NOT_COMPARED')} not compared, ${count('OUT_OF_SCOPE')} out of scope.`
+}
+
 /**
  * The one sentence a finding stands on. Stored findings can predate the current templates, so the
  * old disagreement and compliance sentences are read into the words Rivell uses now, and the old
@@ -406,7 +468,15 @@ export function findingGapText(
   )
   text = text.replace(
     /The clause deals with this subject, but its wording is ambiguous or depends on something outside the contract, so compliance cannot be decided\./gi,
-    'The clause depends on something outside the contract, so Rivell cannot tell whether it meets your playbook.',
+    'Depends on terms outside this contract; check them before deciding.',
+  )
+  text = text.replace(
+    /The clause depends on something outside the contract, so Rivell cannot tell whether it meets your playbook\./gi,
+    'Depends on terms outside this contract; check them before deciding.',
+  )
+  text = text.replace(
+    /No playbook position addresses this clause, and it reads as unusual for this kind of contract(?: and against our side)?\.?/gi,
+    'No playbook position covers this clause. It may be unusual for this kind of contract; check it.',
   )
   text = text.replace(
     /Multiple conflicting published policies apply to ([A-Z_]+); no rule was chosen and the ambiguity is preserved\./g,
@@ -467,6 +537,61 @@ export type FindingPlaybookRule = {
   text: string | null
   basedOn: string | null
   escalation: string | null
+  /** Why a narrower position still governs this contract, or null when no reason needs saying. */
+  appliesTo: string | null
+}
+
+/** Contract types a child agreement is made under. */
+const CONTRACT_TYPE_PARENTS: Record<string, string[]> = {
+  DPA: ['MSA'],
+  SOW: ['MSA'],
+  ORDER_FORM: ['MSA', 'SAAS'],
+  AMENDMENT: ['MSA'],
+}
+
+/** Child types as a sentence names them, where the short label would read as a code. */
+const CONTRACT_TYPE_SENTENCE_LABELS: Record<string, string> = {
+  DPA: 'data processing agreement',
+  SOW: 'statement of work',
+  ORDER_FORM: 'order form',
+  AMENDMENT: 'amendment',
+}
+
+const PARENT_PHRASES: Record<string, string> = {
+  MSA: 'an MSA',
+  SAAS: 'a SaaS',
+}
+
+/**
+ * Why a position whose own "Applies to" is narrower than its playbook still governs this
+ * contract: either the playbook declares more types than the position, or the contract type
+ * reaches the position through the parent agreement it sits under.
+ */
+function appliesToLine(
+  scope:
+    | { declaredContractTypes: string[]; sourceContractTypes: string[] }
+    | null
+    | undefined,
+  contractType: string | null,
+): string | null {
+  if (!scope || scope.sourceContractTypes.length === 0) return null
+  const own = scope.sourceContractTypes
+  const declared = scope.declaredContractTypes
+  const narrower = declared.length === 0 || declared.some((type) => !own.includes(type))
+  const parent = contractType
+    ? (CONTRACT_TYPE_PARENTS[contractType] ?? []).find((type) => own.includes(type))
+    : undefined
+  const throughParent =
+    parent !== undefined && contractType !== null && !own.includes(contractType)
+  if (!narrower && !throughParent) return null
+  const types = own.map((type) => CONTRACT_TYPE_LABELS[type] ?? humanizeCode(type)).join(', ')
+  if (!throughParent) return `Applies to ${types}.`
+  const parentPhrase =
+    PARENT_PHRASES[parent] ?? `the ${CONTRACT_TYPE_LABELS[parent] ?? humanizeCode(parent)}`
+  const contract =
+    CONTRACT_TYPE_SENTENCE_LABELS[contractType] ??
+    (CONTRACT_TYPE_LABELS[contractType] ?? humanizeCode(contractType)).toLowerCase()
+  return `Applies to ${types}; used for this ${contract} because it sits under ${parentPhrase}.`
 }
 
 function firstNonEmpty<T>(...lists: readonly (readonly T[])[]): readonly T[] {
@@ -491,6 +616,7 @@ export function findingPlaybookRule(
   >,
   label: ConceptLabel,
   playbooks: readonly PlaybookUsed[] | null,
+  contractType: string | null = null,
 ): FindingPlaybookRule | null {
   const concept = finding.secondaryConcept ?? finding.concept
   const labelText = finding.positionLabel ?? (concept ? label(concept) : '')
@@ -499,7 +625,7 @@ export function findingPlaybookRule(
   const position = finding.positionComparison
   if (!position) {
     return omission && labelText
-      ? { label: labelText, text: null, basedOn: null, escalation: null }
+      ? { label: labelText, text: null, basedOn: null, escalation: null, appliesTo: null }
       : null
   }
   const family = finding.issueFamily
@@ -512,7 +638,7 @@ export function findingPlaybookRule(
     : firstNonEmpty(position.preferred, position.fallback, position.walkAway)
   if (chosen.length === 0) {
     return omission && labelText
-      ? { label: labelText, text: null, basedOn: null, escalation: null }
+      ? { label: labelText, text: null, basedOn: null, escalation: null, appliesTo: null }
       : null
   }
   const texts = chosen.map((entry) => entry.text.trim()).filter(Boolean)
@@ -532,11 +658,15 @@ export function findingPlaybookRule(
   const version =
     playbook?.publicationNumber ?? (chosen.length === 1 ? chosen[0].publicationNumber : null)
   const escalation = position.escalation[0]?.trigger.trim() || null
+  const scope = finding.evidenceItems.find(
+    (item) => item.evidenceId === chosen[0].evidenceItemId,
+  )?.applicabilityScope
   return {
     label: labelText,
     text: texts.length > 0 ? texts.join('\n\n') : null,
     basedOn: playbook && version !== null ? `${playbook.name}, version ${version}` : null,
     escalation,
+    appliesTo: appliesToLine(scope, contractType),
   }
 }
 
@@ -630,17 +760,24 @@ export function isRelatedPosition(
 /**
  * The issue line a finding is listed under. A clause no playbook position addresses is its own
  * kind: the family alone would read as the older "policy unavailable" case. The whole-contract
- * read's advisory is the same gap said in different words, so it uses the same line (DW-070).
+ * read's advisory is the same gap said in different words, so it uses the same line.
+ * A partly-met fallback is not simply within it, so it says so wherever the line appears.
  */
 export function findingIssueLabel(
-  finding: Pick<FindingSummary, 'issueFamily' | 'observationKind'>,
+  finding: Pick<FindingSummary, 'issueFamily' | 'observationKind'> & {
+    partlyWithinFallback?: boolean
+    quality?: FindingQuality | null
+  },
 ): string {
+  if (finding.partlyWithinFallback || finding.quality?.fallbackConditionsOutcome === 'PARTIAL') {
+    return 'Partly within your fallback'
+  }
   if (finding.observationKind === 'NOT_COVERED_BY_PLAYBOOK') {
     return observationKindLabel(finding.observationKind)
   }
   if (finding.observationKind === 'SPOTTED_IN_WHOLE_CONTRACT_READ') {
     // The whole-contract read picks the same gap a clause mark calls "Not covered by your
-    // playbook"; the header says the same, never the older "Policy unavailable" (DW-070).
+    // playbook"; the header says the same, never the older "Policy unavailable".
     return 'Not covered by your playbook'
   }
   if (finding.observationKind.startsWith('UNCERTAINTY:second_opinion_')) {
@@ -669,13 +806,16 @@ export function decidedByLabel(quality: FindingQuality | null): string | null {
 }
 
 /**
- * The typed approval rule behind a finding, as the panel shows it. Council §A.3: an approval
+ * The typed approval rule behind a finding, as the panel shows it. An approval
  * exists only when a rule names an approver, so this is null when no rule applies, whatever the
  * finding's trigger text says.
  */
 export type ApprovalSummary = {
   approver: string
-  /** The rule's own condition, shown after "Escalate if". */
+  /**
+   * The rule's own condition: an escalation trigger for a walk-away, an acceptance condition
+   * for a fallback.
+   */
   condition: string | null
   source: string | null
   stance: 'FALLBACK' | 'PROHIBITED' | null
@@ -691,7 +831,7 @@ export function approvalSummary(quality: FindingQuality | null): ApprovalSummary
       ? quality.escalationStance
       : null
   return {
-    // the panel opens a sentence with the approver ("General counsel approves this fallback")
+    // the panel names the approver in the approval line ("Approval required: General counsel")
     approver: approver.charAt(0).toUpperCase() + approver.slice(1),
     condition: quality.escalationCondition?.trim() || null,
     source: quality.escalationSource?.trim() || null,
@@ -705,7 +845,28 @@ export function approvalSummary(quality: FindingQuality | null): ApprovalSummary
   }
 }
 
-/** The one line that shows a lower-level rule naming another approver (council §A.2). */
+/**
+ * What the clause departs from, so the approval line names the departure and not the rule's
+ * stance: a fallback rule also covers a clause beyond the fallback.
+ */
+export function approvalDeparture(
+  issueFamily: string,
+  summary: ApprovalSummary | null,
+): string | null {
+  if (!summary) return null
+  switch (issueFamily) {
+    case 'POSITION_WALK_AWAY':
+      return 'for this walk-away'
+    case 'POSITION_NEEDS_FALLBACK':
+      return 'for a clause beyond the fallback'
+    case 'POSITION_ACCEPTABLE_FALLBACK':
+      return 'for this fallback'
+    default:
+      return summary.stance === 'PROHIBITED' ? 'for this walk-away' : 'for this clause'
+  }
+}
+
+/** The one line that shows a lower-level rule naming another approver. */
 export function approvalConflictLine(summary: ApprovalSummary | null): string | null {
   if (!summary?.conflict) return null
   const { approver, source } = summary.conflict
@@ -714,14 +875,21 @@ export function approvalConflictLine(summary: ApprovalSummary | null): string | 
   return `The entry names ${approver} for this.`
 }
 
-/** The rule's condition, in the council's own "Escalate if" form. */
+/**
+ * The rule's condition. A walk-away rule's condition is an escalation trigger; a fallback
+ * rule's condition is the acceptance condition the source puts on taking the fallback, so it
+ * is never labelled "Escalate if".
+ */
 export function escalateIfLine(summary: ApprovalSummary | null): string | null {
-  return summary?.condition ? `Escalate if: ${summary.condition}.` : null
+  if (!summary?.condition) return null
+  return summary.stance === 'FALLBACK'
+    ? `Approval applies if: ${summary.condition}.`
+    : `Escalate if: ${summary.condition}.`
 }
 
 /**
  * A source condition the playbook states without naming who approves it. The panel shows it,
- * followed by "No approver is named.", so it never reads as a broken approval (council §E).
+ * followed by "No approver is named.", so it never reads as a broken approval.
  * An "Escalate to <role>" route is not a condition: only the part after a boundary word is,
  * and a route without one yields nothing.
  */

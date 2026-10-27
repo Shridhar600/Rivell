@@ -30,6 +30,7 @@ function candidate(partial: Partial<Candidate> = {}): Candidate {
     title: 'Rule',
     contentText: 'Rule content',
     payloadColumns: {},
+    payloadFieldRoles: {},
     legalConceptKey: 'LIMITATION_OF_LIABILITY',
     effectiveConceptKey: 'LIMITATION_OF_LIABILITY',
     conceptCorrection: null,
@@ -340,6 +341,7 @@ describe('semantic display helpers', () => {
     expect(input).toEqual({
       positions: ['PREFERRED'],
       requiresApproval: false,
+      escalationTrigger: '',
       preferredText: 'Net 60',
       fallbackTexts: ['Net 45', 'Net 30'],
       prohibitedText: '',
@@ -409,6 +411,21 @@ describe('semantic display helpers', () => {
       authorityRules: [],
     })
     expect(formatBoolean(null)).toBe('Not specified')
+  })
+
+  it('sends an empty position set and a blank escalation trigger when both are cleared', () => {
+    const current = candidate({
+      positions: ['PREFERRED', 'FALLBACK'],
+      escalationTrigger: 'Above 2x',
+    })
+    const draft = semanticDraftFrom(current)
+
+    const cleared = semanticInputFrom(
+      { ...draft, positions: [], escalationTrigger: '  ' },
+      current,
+    )
+
+    expect(cleared).toMatchObject({ positions: [], escalationTrigger: '' })
   })
 
   it('sends no approval field when approval did not change', () => {

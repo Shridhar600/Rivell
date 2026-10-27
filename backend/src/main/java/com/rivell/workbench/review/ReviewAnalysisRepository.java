@@ -23,6 +23,10 @@ public interface ReviewAnalysisRepository {
 
     boolean markRunCompleted(UUID organizationId, UUID runId, Instant completedAt);
 
+    /** Stores the run's frozen playbook coverage; written in the completion transaction. */
+    boolean savePlaybookCoverage(
+            UUID organizationId, UUID runId, PlaybookCoverage playbookCoverage);
+
     boolean markRunFailed(UUID organizationId, UUID runId, String reason, Instant completedAt);
 
     /**
@@ -60,6 +64,7 @@ public interface ReviewAnalysisRepository {
 
     void insertSignals(List<RawReviewSignal> signals);
 
+    /** Deletes one check's signals and the finding links that cite them. */
     int deleteSignals(UUID organizationId, UUID runId, UUID planCheckId);
 
     List<RawReviewSignal> findSignals(UUID organizationId, UUID runId);

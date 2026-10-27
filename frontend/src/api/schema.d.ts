@@ -223,7 +223,7 @@ export interface paths {
         put?: never;
         /**
          * Upload a legal knowledge source with its human-declared manifest
-         * @description declaredContractTypes is optional. When it is empty or omitted, the source applies to every contract type; the API does not reject an empty declaration, because existing clients and the evaluation runner rely on it.
+         * @description declaredContractTypes is optional. When it is empty or omitted, the source applies to every contract type; the API does not reject an empty declaration, because existing clients and the evaluation runner rely on it. clientRequestId is optional: repeating an upload with the same key returns the artifact the first attempt stored.
          */
         post: operations["upload"];
         delete?: never;
@@ -1080,6 +1080,7 @@ export interface components {
             effectiveFrom?: string;
             /** Format: date */
             effectiveTo?: string;
+            sourceContractTypes?: string[];
         };
         AuthorityConflict: {
             approver?: string;
@@ -1684,6 +1685,24 @@ export interface components {
             code?: string;
             message?: string;
         };
+        /** @description What one analysis run did with one applicable published playbook position */
+        PlaybookCoverageEntryView: {
+            /** Format: uuid */
+            positionCandidateId?: string;
+            label?: string;
+            code?: string | null;
+            topic?: string | null;
+            /** @enum {string} */
+            state?: "COMPARED" | "NOT_FOUND" | "NOT_COMPARED" | "OUT_OF_SCOPE";
+            /** @enum {string|null} */
+            verdict?: "MEETS_PREFERRED" | "WITHIN_FALLBACK" | "PARTLY_WITHIN_FALLBACK" | "BEYOND_FALLBACK" | "WALK_AWAY" | "UNCLEAR" | null;
+            /** Format: uuid */
+            clauseHeadingNodeId?: string | null;
+            /** Format: uuid */
+            findingId?: string | null;
+            /** @enum {string|null} */
+            reason?: "NOT_CHECKED" | "FOUND_NOT_JUDGED" | "CHECK_DID_NOT_COMPLETE" | null;
+        };
         PlaybookUsedView: {
             /** Format: uuid */
             artifactId?: string;
@@ -1720,6 +1739,8 @@ export interface components {
             /** Format: int32 */
             runNumber?: number;
             status?: string;
+            /** @description What the run did with each applicable published playbook position; null on runs that predate the coverage list or whose coverage could not be computed */
+            playbookCoverage?: components["schemas"]["PlaybookCoverageEntryView"][] | null;
         };
         ReviewSummaryView: {
             /** Format: uuid */
@@ -1984,6 +2005,7 @@ export interface components {
             /** @enum {string} */
             proposedLanguageSource?: "APPROVED_DRAFTING" | "GENERATIVE" | "NONE";
             relatedPosition?: boolean;
+            partlyWithinFallback?: boolean;
             decidedBy?: string;
             /** Format: date-time */
             createdAt?: string;
@@ -3389,6 +3411,7 @@ export interface operations {
                 effectiveFrom?: string;
                 effectiveTo?: string;
                 note?: string;
+                clientRequestId?: string;
             };
             header?: never;
             path?: never;

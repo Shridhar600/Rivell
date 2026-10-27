@@ -248,16 +248,10 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
     private GenerationResult toResult(
             GenerationRequest request, OpenAiCompatibleDtos.ChatResponse response) {
         if (response.error() != null) {
-            var error = new OpenAiCompatibleErrors.Error(
-                    response.error().code(), response.error().type());
-            if (OpenAiCompatibleErrors.outOfCredit(error.code(), error.type())) {
-                creditGuard.record(creditKey());
-                throw new com.rivell.workbench.intelligence.ProviderOutOfCreditException(
-                        "Provider account has no credits (error response)");
-            }
-            throw new ProviderUnavailableException(
-                    "Provider returned an error response (type="
-                            + response.error().type() + ", code=" + response.error().code() + ")");
+            var failure = OpenAiCompatibleErrors.errorResponse(
+                    response.error().code(), response.error().type(), "generative");
+            recordOutOfCredit(failure);
+            throw failure;
         }
         if (response.model() == null || response.model().isBlank()) {
             throw new ProviderProtocolException(

@@ -145,6 +145,8 @@ class SystemApiIT {
             assertThat(openApi.at("/components/schemas/FindingDetailView/properties/" + field)
                     .isMissingNode()).as("FindingDetailView." + field).isFalse();
         }
+        assertThat(openApi.at("/components/schemas/FindingSummaryView/properties/partlyWithinFallback")
+                .isMissingNode()).as("FindingSummaryView.partlyWithinFallback").isFalse();
         for (var field : new String[] {"route", "addressed", "searchFound", "searchFailed",
                 "spottedSeverity", "omissionCandidates", "searchedClauses", "presenceProbabilities",
                 "addressedBySearch", "flaggedBySearch"}) {
@@ -158,7 +160,7 @@ class SystemApiIT {
         assertThat(openApi.at("/components/schemas/JudgedPositionView/properties/foundBy")
                 .isMissingNode()).as("JudgedPositionView.foundBy").isFalse();
 
-        // DW-037 item 1: the redline execution views carry closed sets, not free strings.
+        // the redline execution views carry closed sets, not free strings.
         assertThat(openApi.at("/components/schemas/RedlineExecutionView/properties/status/enum")
                 .toString()).contains("\"COMPLETED\"").contains("\"FAILED\"");
         assertThat(openApi.at("/components/schemas/RedlineExecutionView/properties/outcome/enum")

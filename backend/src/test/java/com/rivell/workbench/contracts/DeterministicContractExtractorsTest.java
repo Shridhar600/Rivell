@@ -443,6 +443,39 @@ class DeterministicContractExtractorsTest {
     }
 
     @Test
+    void aTermDefinedByAppositionInTheIntroductionKeepsItsDescribingSentence() {
+        var introduction = paragraph("A. The Parties wish to consider a possible integration "
+                + "between their services, including technical evaluation in a non-production "
+                + "sandbox (the \"Purpose\").", 1);
+        var use = paragraph("The Purpose does not permit production deployment.", 3);
+        var nodes = List.of(bodyNode(), introduction,
+                heading("Scope", "1", 2), use);
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var terms = new DeterministicContractExtractors().definedTerms(VERSION_ID, regions, nodes);
+
+        assertThat(terms).extracting(DefinedTerm::term).containsExactly("Purpose");
+        var term = terms.get(0);
+        assertThat(term.definition()).isEqualTo("The Parties wish to consider a possible "
+                + "integration between their services, including technical evaluation in a "
+                + "non-production sandbox");
+        assertThat(term.definingNodeId()).isEqualTo(introduction.id());
+        assertThat(term.referenceNodeIds()).containsExactly(use.id());
+    }
+
+    @Test
+    void aPartyRoleNamedInBracketsIsNotADefinedTerm() {
+        var introduction = paragraph("Northwind Analytics Limited, a company that provides hosted "
+                + "analytics services (the \"Service Provider\"), and Kestrel Foods Limited, which "
+                + "buys those services for its stores (the \"Buyer\").", 1);
+        var nodes = List.of(bodyNode(), introduction);
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        assertThat(new DeterministicContractExtractors().definedTerms(VERSION_ID, regions, nodes))
+                .isEmpty();
+    }
+
+    @Test
     void duplicateDefinedTermIsFlagged() {
         var nodes = List.of(
                 bodyNode(),
@@ -458,7 +491,7 @@ class DeterministicContractExtractorsTest {
     }
 
     /**
-     * DW-080: the same term stated twice in one node is one definition (the persistence key is
+     * The same term stated twice in one node is one definition (the persistence key is
      * per defining node), and the first wording is the one kept.
      */
     @Test
@@ -585,6 +618,38 @@ class DeterministicContractExtractorsTest {
         assertThat(parties.get(0).machineRoles()).containsExactly(PartyRole.DISCLOSING_PARTY);
         assertThat(parties.get(1).rawName()).isEqualTo("Beta LLC");
         assertThat(parties.get(1).machineRoles()).containsExactly(PartyRole.RECEIVING_PARTY);
+    }
+
+    @Test
+    void foreignLegalFormSuffixesIncludingLowercasePlcYieldParties() {
+        var nodes = List.of(
+                bodyNode(),
+                paragraph("This Agreement is entered into by and between Helvetia Systems AG "
+                        + "(\"Supplier\"), Nordwind Logistics B.V. (\"Customer\") and "
+                        + "Northgate Finance plc (\"Licensor\").", 1));
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var parties = new DeterministicContractExtractors().parties(VERSION_ID, regions, nodes);
+
+        assertThat(parties).extracting(ContractParty::rawName).containsExactly(
+                "Helvetia Systems AG", "Nordwind Logistics B.V.", "Northgate Finance plc");
+        assertThat(parties.get(0).machineRoles()).containsExactly(PartyRole.SUPPLIER);
+        assertThat(parties.get(1).machineRoles()).containsExactly(PartyRole.CUSTOMER);
+        assertThat(parties.get(2).machineRoles()).containsExactly(PartyRole.LICENSOR);
+    }
+
+    @Test
+    void shortLegalFormSuffixesDoNotMatchInsideWordsOrSentenceText() {
+        var nodes = List.of(
+                bodyNode(),
+                paragraph("Notwithstanding the foregoing, the parties agree AB testing and SE "
+                        + "region pilots, and Danish House and Nordic Grab milestones are "
+                        + "excluded.", 1));
+        var regions = new ContractRegionSegmenter().segment(nodes);
+
+        var parties = new DeterministicContractExtractors().parties(VERSION_ID, regions, nodes);
+
+        assertThat(parties).isEmpty();
     }
 
     @Test

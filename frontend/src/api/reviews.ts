@@ -111,10 +111,53 @@ export type ReviewPack = {
   version: string
 }
 
+export const PLAYBOOK_COVERAGE_STATES = [
+  'COMPARED',
+  'NOT_FOUND',
+  'NOT_COMPARED',
+  'OUT_OF_SCOPE',
+] as const
+export type PlaybookCoverageState = (typeof PLAYBOOK_COVERAGE_STATES)[number]
+
+export const PLAYBOOK_COVERAGE_VERDICTS = [
+  'MEETS_PREFERRED',
+  'WITHIN_FALLBACK',
+  'PARTLY_WITHIN_FALLBACK',
+  'BEYOND_FALLBACK',
+  'WALK_AWAY',
+  'UNCLEAR',
+] as const
+export type PlaybookCoverageVerdict = (typeof PLAYBOOK_COVERAGE_VERDICTS)[number]
+
+export const PLAYBOOK_COVERAGE_REASONS = [
+  'NOT_CHECKED',
+  'FOUND_NOT_JUDGED',
+  'CHECK_DID_NOT_COMPLETE',
+] as const
+export type PlaybookCoverageReason = (typeof PLAYBOOK_COVERAGE_REASONS)[number]
+
+/**
+ * What one analysis run did with one published playbook position. `verdict` is present only for
+ * `COMPARED`; `reason` only for `NOT_COMPARED`. A null `playbookCoverage` means the run predates
+ * the list, which is not the same as a run that checked nothing.
+ */
+export type PlaybookCoverageEntry = {
+  positionCandidateId: string
+  label: string
+  code: string | null
+  topic: string | null
+  state: PlaybookCoverageState
+  verdict: PlaybookCoverageVerdict | null
+  clauseHeadingNodeId: string | null
+  findingId: string | null
+  reason: PlaybookCoverageReason | null
+}
+
 export type ReviewRun = {
   id: string
   runNumber: number
   status: RunStatus
+  playbookCoverage: PlaybookCoverageEntry[] | null
 }
 
 export type ReviewDocument = {
@@ -260,6 +303,8 @@ export type FindingSummary = {
   proposedLanguageSource: string
   /** True when the position governs a topic the clause only touches: a LOW note, not a breach. */
   relatedPosition: boolean
+  /** True when the fallback's conditions are only partly met: a review item, not a plain note. */
+  partlyWithinFallback: boolean
   /** Who decided: 'JEV' (Rivell's first review), 'SECOND_OPINION' or 'NEEDS_YOUR_LOOK' (the user decides). Null for other findings. */
   decidedBy: string | null
   createdAt: string
@@ -282,6 +327,17 @@ export type FindingClaim = {
   text: string
   absence: boolean
   evidenceItemIds: string[]
+}
+
+export type FallbackConditionQuality = {
+  /** The fallback number the condition belongs to, in the position's own order. */
+  fallback: number
+  /** The condition in a short phrase, as the check stated it. */
+  condition: string
+  /** MET, UNMET, NOT_STATED or UNKNOWN. */
+  status: string
+  /** The clause or contract-fact words the status rests on; null when there is none. */
+  quote: string | null
 }
 
 export type FindingQuality = {
@@ -323,11 +379,18 @@ export type FindingQuality = {
   wordingFitVerdict: string | null
   /** The fit check's code-owned reason for that verdict. */
   wordingFitReason: string | null
+  /** P3's code-owned state: WITHIN when a listed fallback is fully met, PARTIAL when one is not. */
+  fallbackConditionsOutcome: string | null
+  /** P3: the conditions of the listed fallback, each with the words the status rests on. */
+  fallbackConditions: FallbackConditionQuality[]
   /** Omission check: the estimate that the playbook position requires the provision, 0–1. */
   presenceProbability: number | null
   /** The typed approval rule behind an escalation; null when no rule applies. */
   escalationApprover?: string | null
-  /** The rule's own condition, shown as "Escalate if". */
+  /**
+   * The rule's own condition: an escalation trigger for a walk-away, an acceptance condition
+   * for a fallback.
+   */
   escalationCondition?: string | null
   /** Where the rule was stated: ENTRY, MATRIX or TABLE. */
   escalationSource?: string | null
@@ -543,12 +606,45 @@ function parseReviewPack(value: unknown, what: string): ReviewPack {
   }
 }
 
+function parsePlaybookCoverage(value: unknown, what: string): PlaybookCoverageEntry[] | null {
+  if (value === null || value === undefined) return null
+  if (!Array.isArray(value)) throw malformed(what)
+  return value.map((entry, index) => {
+    const item = asRecord(entry, `${what}.playbookCoverage[${index}]`)
+    const state = readOptionalNullableString(item, 'state', what)
+    const verdict = readOptionalNullableString(item, 'verdict', what)
+    const reason = readOptionalNullableString(item, 'reason', what)
+    return {
+      positionCandidateId: readString(item, 'positionCandidateId', what),
+      label: readString(item, 'label', what),
+      code: readOptionalNullableString(item, 'code', what),
+      topic: readOptionalNullableString(item, 'topic', what),
+      // An unrecognised state must never read as absence: fall back to "not compared".
+      state:
+        state && (PLAYBOOK_COVERAGE_STATES as readonly string[]).includes(state)
+          ? (state as PlaybookCoverageState)
+          : 'NOT_COMPARED',
+      verdict:
+        verdict && (PLAYBOOK_COVERAGE_VERDICTS as readonly string[]).includes(verdict)
+          ? (verdict as PlaybookCoverageVerdict)
+          : null,
+      clauseHeadingNodeId: readOptionalNullableString(item, 'clauseHeadingNodeId', what),
+      findingId: readOptionalNullableString(item, 'findingId', what),
+      reason:
+        reason && (PLAYBOOK_COVERAGE_REASONS as readonly string[]).includes(reason)
+          ? (reason as PlaybookCoverageReason)
+          : null,
+    }
+  })
+}
+
 function parseReviewRun(value: unknown, what: string): ReviewRun {
   const run = asRecord(value, what)
   return {
     id: readString(run, 'id', what),
     runNumber: readOptionalNumber(run, 'runNumber', what),
     status: readStatus(run, 'status', RUN_STATUSES),
+    playbookCoverage: parsePlaybookCoverage(run.playbookCoverage, what),
   }
 }
 
@@ -712,6 +808,7 @@ function parseFindingSummary(value: unknown, what: string): FindingSummary {
     proposedLanguageSource:
       readOptionalNullableString(finding, 'proposedLanguageSource', what) ?? 'UNKNOWN',
     relatedPosition: readOptionalBoolean(finding, 'relatedPosition', what),
+    partlyWithinFallback: readOptionalBoolean(finding, 'partlyWithinFallback', what),
     decidedBy: readOptionalNullableString(finding, 'decidedBy', what),
     createdAt: readOptionalNullableString(finding, 'createdAt', what) ?? '',
     addedBy: readOptionalNullableString(finding, 'addedBy', what),
@@ -775,6 +872,16 @@ function parseClaim(value: unknown, what: string): FindingClaim {
   }
 }
 
+function parseFallbackCondition(value: unknown, what: string): FallbackConditionQuality {
+  const condition = asRecord(value, what)
+  return {
+    fallback: readOptionalNumber(condition, 'fallback', what),
+    condition: readString(condition, 'condition', what),
+    status: readOptionalNullableString(condition, 'status', what) ?? 'UNKNOWN',
+    quote: readOptionalNullableString(condition, 'quote', what),
+  }
+}
+
 function parseQuality(value: unknown, what: string): FindingQuality | null {
   if (value === null || value === undefined) return null
   const quality = asRecord(value, what)
@@ -811,6 +918,11 @@ function parseQuality(value: unknown, what: string): FindingQuality | null {
     spottedReason: readOptionalNullableString(quality, 'spottedReason', what),
     wordingFitVerdict: readOptionalNullableString(quality, 'wordingFitVerdict', what),
     wordingFitReason: readOptionalNullableString(quality, 'wordingFitReason', what),
+    fallbackConditionsOutcome: readOptionalNullableString(quality, 'fallbackConditionsOutcome', what),
+    fallbackConditions:
+      quality.fallbackConditions === null || quality.fallbackConditions === undefined
+        ? []
+        : readArray(quality, 'fallbackConditions', what, parseFallbackCondition),
     presenceProbability:
       presenceProbability !== null && presenceProbability >= 0 && presenceProbability <= 1
         ? presenceProbability

@@ -15,7 +15,7 @@ import com.rivell.workbench.contracts.FactCorrection;
 import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.taxonomy.CoreConcepts;
 
-/** DW-100: deterministic survival statements on the contract cover named confidentiality clauses. */
+/** Deterministic survival statements on the contract cover named confidentiality clauses. */
 class SurvivalStatementCoverageTest {
 
     private static final UUID VERSION = UUID.randomUUID();

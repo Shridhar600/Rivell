@@ -9,6 +9,10 @@ import java.time.format.DateTimeFormatter;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 
+import com.rivell.workbench.intelligence.ProviderOutOfCreditException;
+import com.rivell.workbench.intelligence.ProviderRateLimitedException;
+import com.rivell.workbench.intelligence.ProviderRejectedException;
+
 class OpenAiCompatibleErrorsTest {
 
     @Test
@@ -35,5 +39,26 @@ class OpenAiCompatibleErrorsTest {
         assertThat(OpenAiCompatibleErrors.outOfCredit(
                 "{\"error\":{\"code\":\"rate_limit_exceeded\"}}")).isFalse();
         assertThat(OpenAiCompatibleErrors.outOfCredit("not json")).isFalse();
+    }
+
+    @Test
+    void anErrorObjectIsClassifiedByCodeAndType() {
+        assertThat(OpenAiCompatibleErrors.errorResponse(null, "rate_limit", "generative"))
+                .isInstanceOf(ProviderRateLimitedException.class);
+        assertThat(OpenAiCompatibleErrors.errorResponse(
+                "slow_down", "rate_limit_error", "generative"))
+                .isInstanceOf(ProviderRateLimitedException.class);
+        assertThat(OpenAiCompatibleErrors.errorResponse(
+                "invalid_api_key", "invalid_request_error", "generative"))
+                .isExactlyInstanceOf(ProviderRejectedException.class);
+        assertThat(OpenAiCompatibleErrors.errorResponse("model_not_found", null, "generative"))
+                .isExactlyInstanceOf(ProviderRejectedException.class);
+        assertThat(OpenAiCompatibleErrors.errorResponse(
+                "context_length_exceeded", null, "generative"))
+                .isExactlyInstanceOf(ProviderRejectedException.class);
+        assertThat(OpenAiCompatibleErrors.errorResponse(null, "permission_error", "generative"))
+                .isExactlyInstanceOf(ProviderRejectedException.class);
+        assertThat(OpenAiCompatibleErrors.errorResponse("insufficient_quota", null, "generative"))
+                .isInstanceOf(ProviderOutOfCreditException.class);
     }
 }

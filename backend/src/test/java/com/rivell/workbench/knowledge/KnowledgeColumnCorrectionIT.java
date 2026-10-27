@@ -204,7 +204,7 @@ class KnowledgeColumnCorrectionIT {
     }
 
     /**
-     * Reviewer finding 4: a human who first states the rule in words and then fixes the cell it
+     * A human who first states the rule in words and then fixes the cell it
      * came from must not lose their words. The structured correction is recorded either way, but
      * the authoritative wording stays the human's own text.
      */

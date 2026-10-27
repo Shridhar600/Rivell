@@ -27,13 +27,13 @@ class ReviewEnginePropertiesTest {
     }
 
     @Test
-    void theSecondOpinionLeverDefaultsOnAndTheFallbackConditionLeverOff() {
-        // P3 measured on three luna runs: +0/0/1 serious catches for +1/1/2 serious false alarms
+    void theSecondOpinionLeverDefaultsOnAndTheFallbackConditionLeverOn() {
         var properties = new ReviewEngineProperties(null, null, null, null, null);
 
         assertThat(properties.severity().agreedWorseCategory()).isTrue();
+        assertThat(properties.severity().r1NeedsCorroboration()).isFalse();
         assertThat(properties.routing().withinSplitMargin()).isEqualTo(0.45);
-        assertThat(properties.fallbackConditions().enabled()).isFalse();
+        assertThat(properties.fallbackConditions().enabled()).isTrue();
         assertThat(properties.fallbackConditions().maxChecks()).isEqualTo(40);
     }
 
@@ -71,5 +71,15 @@ class ReviewEnginePropertiesTest {
         assertThatThrownBy(() -> new ReviewEngineProperties(null, null, null, null, null, null, -1))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("max-transient-failures");
+    }
+
+    @Test
+    void theRetainedRunsDefaultToSixteenAndMustBePositive() {
+        assertThat(new ReviewEngineProperties(null, null, null, null, null).retainedRuns())
+                .isEqualTo(16);
+        assertThatThrownBy(() -> new ReviewEngineProperties(
+                null, null, null, null, null, null, null, null, 0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("retained-runs");
     }
 }

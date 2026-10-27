@@ -17,25 +17,40 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * changes: {@code severity.agreedWorseCategory} (P1: an agreed second opinion lends its category
  * when it is worse), {@code routing.withinSplitMargin} (P2: a WITHIN_FALLBACK judgement whose
  * BEYOND and WALK_AWAY mass reaches the margin also gets a second opinion; negative turns it off),
- * {@code fallbackConditions} (P3: a condition-by-condition check of every final WITHIN_FALLBACK).
+ * {@code fallbackConditions} (P3: a condition-by-condition check of every final WITHIN_FALLBACK;
+ * on by default, it reports the conditions on the finding and never changes the category).
+ * {@code severity.r1NeedsCorroboration} (R1: a disagreement the second opinion calls a walk-away
+ * or beyond-fallback raises the finding to MEDIUM only when the fallback-condition check found it
+ * PARTIAL or the whole-contract read named the clause; off by default for the luna calibration).
+ *
+ * <p>{@code walkAwayAbsence}: one check reports a published position whose walk-away
+ * describes an absent right or protection the contract does not meet, whether no clause
+ * addresses it or a clause grants it; on by default, and never on a contract type made under a
+ * parent agreement.
  *
  * <p>{@code maxTransientFailures}: how many transient infrastructure failures one analysis run may
  * survive before it is failed terminally (default 3; 0 makes every transient failure terminal).
+ * {@code retainedRuns}: how many analysis runs keep their whole-contract spotting memo and
+ * second-opinion counters in memory (default 16); it must be at least the number of reviews
+ * analysed at once, with headroom for runs that finished recently, or a live run loses its
+ * counters and repeats calls.
  */
 @ConfigurationProperties("rivell.review")
 public record ReviewEngineProperties(
         Routing routing, Boolean omissions, Boolean definitions, Severity severity,
-        FallbackConditions fallbackConditions, Duration analysisBudget,
-        Integer maxTransientFailures) {
+        FallbackConditions fallbackConditions, WalkAwayAbsence walkAwayAbsence,
+        Duration analysisBudget, Integer maxTransientFailures, Integer retainedRuns) {
 
     @org.springframework.boot.context.properties.bind.ConstructorBinding
     public ReviewEngineProperties {
         routing = routing == null ? new Routing(null, null, null, null) : routing;
         omissions = omissions == null ? Boolean.FALSE : omissions;
         definitions = definitions == null ? Boolean.FALSE : definitions;
-        severity = severity == null ? new Severity(null) : severity;
+        severity = severity == null ? new Severity(null, null) : severity;
         fallbackConditions = fallbackConditions == null
                 ? new FallbackConditions(null, null) : fallbackConditions;
+        walkAwayAbsence = walkAwayAbsence == null
+                ? new WalkAwayAbsence(null) : walkAwayAbsence;
         analysisBudget = analysisBudget == null ? Duration.ofMinutes(30) : analysisBudget;
         if (analysisBudget.isZero() || analysisBudget.isNegative()) {
             throw new IllegalArgumentException("rivell.review.analysis-budget must be positive");
@@ -45,40 +60,70 @@ public record ReviewEngineProperties(
             throw new IllegalArgumentException(
                     "rivell.review.max-transient-failures must be >= 0");
         }
+        retainedRuns = retainedRuns == null ? 16 : retainedRuns;
+        if (retainedRuns < 1) {
+            throw new IllegalArgumentException("rivell.review.retained-runs must be >= 1");
+        }
+    }
+
+    public ReviewEngineProperties(Routing routing, Boolean omissions, Boolean definitions,
+            Severity severity, FallbackConditions fallbackConditions,
+            Duration analysisBudget, Integer maxTransientFailures) {
+        this(routing, omissions, definitions, severity, fallbackConditions, null,
+                analysisBudget, maxTransientFailures, null);
     }
 
     public ReviewEngineProperties(Routing routing, Boolean omissions, Boolean definitions,
             Severity severity, FallbackConditions fallbackConditions,
             Duration analysisBudget) {
-        this(routing, omissions, definitions, severity, fallbackConditions, analysisBudget, null);
+        this(routing, omissions, definitions, severity, fallbackConditions, null,
+                analysisBudget, null, null);
     }
 
     public ReviewEngineProperties(Routing routing, Boolean omissions, Boolean definitions,
             Severity severity, FallbackConditions fallbackConditions) {
-        this(routing, omissions, definitions, severity, fallbackConditions, null, null);
+        this(routing, omissions, definitions, severity, fallbackConditions, null, null, null, null);
     }
 
-    /** P1: on an agreed second opinion the finding takes the worse of the two categories. */
-    public record Severity(Boolean agreedWorseCategory) {
+    /**
+     * P1: on an agreed second opinion the finding takes the worse of the two categories.
+     * R1: when {@code r1NeedsCorroboration} is on, a disagreement the second opinion calls a
+     * walk-away or beyond-fallback needs a second signal on the clause to raise to MEDIUM.
+     */
+    public record Severity(Boolean agreedWorseCategory, Boolean r1NeedsCorroboration) {
 
         public Severity {
             agreedWorseCategory = agreedWorseCategory == null ? Boolean.TRUE : agreedWorseCategory;
+            r1NeedsCorroboration = r1NeedsCorroboration == null
+                    ? Boolean.FALSE : r1NeedsCorroboration;
         }
     }
 
     /**
-     * P3: the condition-by-condition check; at most {@code maxChecks} calls per analysis run. Off by
-     * default: on gpt-6-luna it raised more compliant clauses than planted issues.
+     * P3: the condition-by-condition check; at most {@code maxChecks} calls per analysis run. On by
+     * default: it reports the fallback's conditions on the finding and never changes the category.
      */
     public record FallbackConditions(Boolean enabled, Integer maxChecks) {
 
         public FallbackConditions {
-            enabled = enabled == null ? Boolean.FALSE : enabled;
+            enabled = enabled == null ? Boolean.TRUE : enabled;
             maxChecks = maxChecks == null ? 40 : maxChecks;
             if (maxChecks < 0) {
                 throw new IllegalArgumentException(
                         "rivell.review.fallback-conditions.max-checks must be >= 0");
             }
+        }
+    }
+
+    /**
+     * The walk-away absence check: report a walk-away that describes an absent right when no
+     * clause addresses the position. On by default; the omission lane's own trigger stays behind
+     * {@code omissions}.
+     */
+    public record WalkAwayAbsence(Boolean enabled) {
+
+        public WalkAwayAbsence {
+            enabled = enabled == null ? Boolean.TRUE : enabled;
         }
     }
 

@@ -109,7 +109,8 @@ public final class RetrievalResponses {
                         item.applicabilityScope().paperSource(),
                         item.applicabilityScope().jurisdiction(),
                         item.applicabilityScope().effectiveFrom(),
-                        item.applicabilityScope().effectiveTo()));
+                        item.applicabilityScope().effectiveTo(),
+                        List.copyOf(item.applicabilityScope().sourceContractTypes())));
     }
 
     @Schema(name = "ApplicabilityScopeResponse")
@@ -120,7 +121,9 @@ public final class RetrievalResponses {
             String paperSource,
             String jurisdiction,
             LocalDate effectiveFrom,
-            LocalDate effectiveTo) {
+            LocalDate effectiveTo,
+            /** The record's own "Applies to"; empty when it states none. */
+            List<String> sourceContractTypes) {
     }
 
     @Schema(name = "PolicyFactsResponse")

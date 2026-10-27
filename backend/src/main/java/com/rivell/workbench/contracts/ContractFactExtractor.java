@@ -23,6 +23,16 @@ import com.rivell.workbench.taxonomy.CoreConcepts;
  */
 public final class ContractFactExtractor {
 
+    private static final Pattern CAP_WORD_MULTIPLE =
+            Pattern.compile("([a-z]+) \\((\\d+)\\) times the", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CAP_NUMERIC_MULTIPLE =
+            Pattern.compile("(\\d+) times the", Pattern.CASE_INSENSITIVE);
+    private static final Pattern NOTICE_WORD_DAYS =
+            Pattern.compile("(?:upon|on) ([a-z]+) \\((\\d+)\\) days['’]?",
+                    Pattern.CASE_INSENSITIVE);
+    private static final Pattern NOTICE_NUMERIC_DAYS =
+            Pattern.compile("(?:upon|on) (\\d+) days['’]?", Pattern.CASE_INSENSITIVE);
+
     private final SemanticDecisionService decisionService;
     private final GenerativeReasoningService reasoningService;
     private final ContractEnrichmentProperties properties;
@@ -140,12 +150,11 @@ public final class ContractFactExtractor {
     }
 
     private Optional<String> deterministicCap(String text) {
-        var matcher = Pattern.compile("([a-z]+) \\((\\d+)\\) times the",
-                Pattern.CASE_INSENSITIVE).matcher(text);
+        var matcher = CAP_WORD_MULTIPLE.matcher(text);
         if (matcher.find()) {
             return Optional.of(matcher.group(2));
         }
-        matcher = Pattern.compile("(\\d+) times the", Pattern.CASE_INSENSITIVE).matcher(text);
+        matcher = CAP_NUMERIC_MULTIPLE.matcher(text);
         if (matcher.find()) {
             return Optional.of(matcher.group(1));
         }
@@ -186,14 +195,11 @@ public final class ContractFactExtractor {
     }
 
     private Optional<String> deterministicNoticeDays(String text) {
-        var matcher = Pattern.compile(
-                "(?:upon|on) ([a-z]+) \\((\\d+)\\) days['’]?",
-                Pattern.CASE_INSENSITIVE).matcher(text);
+        var matcher = NOTICE_WORD_DAYS.matcher(text);
         if (matcher.find()) {
             return Optional.of(matcher.group(2));
         }
-        matcher = Pattern.compile("(?:upon|on) (\\d+) days['’]?",
-                Pattern.CASE_INSENSITIVE).matcher(text);
+        matcher = NOTICE_NUMERIC_DAYS.matcher(text);
         if (matcher.find()) {
             return Optional.of(matcher.group(1));
         }

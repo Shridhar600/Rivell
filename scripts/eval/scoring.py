@@ -114,7 +114,7 @@ def _topic_matches(concept_key, playbook_ref):
     return bool(_stems(concept_key) & _stems(ref))
 
 
-# ---------- DW-069: absence credit by position label or reference, whole words only ----------
+# ---------- absence credit by position label or reference, whole words only ----------
 # Stem overlap credited the wrong provision ("regulat" is not a rule) and missed the right one
 # when the extracted concept was odd. A position code ("G-03") or the position's own words decide
 # the credit; words must match whole, never by stem.
@@ -146,7 +146,7 @@ def absence_findings(findings):
 
 
 def absence_matches(finding, issue):
-    """Whether an absence finding is the issue's missing provision (DW-069).
+    """Whether an absence finding is the issue's missing provision.
 
     A finding's position label or reference is authoritative when it carries a position code: the
     codes must match. Without a carried code, every content word of the issue's playbook reference
@@ -221,14 +221,18 @@ def score_contract(answer, structure_nodes, clauses, findings):
     for index, issue in enumerate(expected_issues):
         hit = any(sid in finding_sections for sid in issue.get("sectionIds", []))
         if issue["category"] == "MISSING_PROVISION" and not hit:
-            # DW-069: an absence finding counts only when its position label or reference names
+            # an absence finding counts only when its position label or reference names
             # the provision the key names (whole words, never stems); each finding counts once
             hit = index in absence_hit
         # stricter: a HIGH/MEDIUM planted issue caught by a MEDIUM/HIGH finding in its section
         serious = any(f.get("severity") in ("MEDIUM", "HIGH")
                       for sid in issue.get("sectionIds", []) for f in finding_sections.get(sid, []))
+        # a section hit can credit a missing provision through an unrelated finding on that
+        # clause; this says whether the review actually reported the provision as missing
+        named = issue["category"] == "MISSING_PROVISION" and index in absence_hit
         issues.append({"id": issue["id"], "category": issue["category"],
-                       "severity": issue.get("severity"), "detected": hit, "detectedSerious": serious})
+                       "severity": issue.get("severity"), "detected": hit, "detectedSerious": serious,
+                       "namedAsMissing": named})
 
     compliant = answer.get("compliantSectionIds", [])
     false_alarms = [sid for sid in compliant if sid in finding_sections]
@@ -245,6 +249,7 @@ def score_contract(answer, structure_nodes, clauses, findings):
         "findingsOffAnswerKey": len(located) - sum(len(v) for v in finding_sections.values()),
         "issues": issues,
         "issuesDetected": sum(1 for i in issues if i["detected"]),
+        "missingNamed": sum(1 for i in issues if i["namedAsMissing"]),
         "compliantSections": len(compliant),
         "falseAlarmSections": len(false_alarms),
         "seriousFalseAlarmSections": len(serious_alarms),

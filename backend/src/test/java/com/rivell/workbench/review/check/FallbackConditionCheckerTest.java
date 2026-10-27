@@ -21,6 +21,7 @@ import com.rivell.workbench.intelligence.ModelBinding;
 import com.rivell.workbench.intelligence.ProviderOutOfCreditException;
 import com.rivell.workbench.intelligence.ProviderUnavailableException;
 import com.rivell.workbench.intelligence.TokenUsage;
+import com.rivell.workbench.review.FallbackCondition;
 import com.rivell.workbench.review.FallbackConditionSpecs;
 
 class FallbackConditionCheckerTest {
@@ -29,8 +30,18 @@ class FallbackConditionCheckerTest {
             + "The courts of Zurich have exclusive jurisdiction.";
     private static final String POSITION = "Compare the clause with our playbook position on Governing Law.\n"
             + "Preferred: English law\nFallback 1: Swiss law if the counterparty is Swiss\nWalk-away: US law";
+    private static final String SOURCE = "Swiss law if the counterparty is Swiss";
     private static final List<String> FACTS = List.of("Party: Helvetia Cloud AG (SUPPLIER)",
             "Party: Studio Ltd of London (CUSTOMER)", "Governing law (stated): Switzerland");
+
+    private static final String CALDER_CLAUSE = "Either party may terminate this agreement for material "
+            + "breach on thirty (30) days' notice if the breach is not remedied.";
+    private static final String CALDER_POSITION = "Compare the clause with our playbook position on "
+            + "Termination for breach.\nPreferred: Either party may terminate on ninety (90) days' notice.\n"
+            + "Fallback 1: A thirty (30) day cure period, with a right for us to suspend performance "
+            + "before termination\nWalk-away: No cure period.";
+    private static final String CALDER_SOURCE = "A thirty (30) day cure period, with a right for us to "
+            + "suspend performance before termination";
 
     private final List<GenerationRequest> requests = new ArrayList<>();
 
@@ -62,20 +73,34 @@ class FallbackConditionCheckerTest {
                 POSITION, listed, fallbackCount, FACTS);
     }
 
+    private static FallbackConditionChecker.Ask calderAsk() {
+        return new FallbackConditionChecker.Ask("We are the customer.", "MSA", "Termination for breach",
+                CALDER_CLAUSE, CALDER_POSITION, true, 1, List.of("Our side: CUSTOMER"));
+    }
+
     private static Map<String, String> answer(String listed, String... lines) {
         return Map.of(FallbackConditionSpecs.FALLBACK_LISTED, listed,
                 FallbackConditionSpecs.CONDITIONS, String.join("\n", lines));
     }
 
+    /** One line grounded in the position's own fallback words. */
+    private static String condition(String line) {
+        return condition(line, SOURCE);
+    }
+
+    private static String condition(String line, String source) {
+        return line + " | " + source;
+    }
+
     @Test
-    void anUnmetConditionWithAQuoteTheFactsHoldRaisesTheClauseToBeyondFallback() {
+    void anUnmetConditionWithAQuoteTheFactsHoldMakesTheFallbackPartial() {
         var checker = checkerAnswering(request -> answer("YES",
-                "1 | UNMET | Studio Ltd of London (CUSTOMER) | the counterparty is Swiss"));
+                condition("1 | UNMET | Studio Ltd of London (CUSTOMER) | the counterparty is Swiss")));
 
         var result = checker.check(ask(true));
 
-        assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.BEYOND);
-        assertThat(result.raises()).isTrue();
+        assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.PARTIAL);
+        assertThat(result.answered()).isTrue();
         assertThat(result.fallbackListed()).isTrue();
         assertThat(result.conditions()).singleElement().satisfies(condition -> {
             assertThat(condition.status()).isEqualTo(FallbackConditionSpecs.UNMET);
@@ -85,113 +110,181 @@ class FallbackConditionCheckerTest {
     }
 
     @Test
-    void anUnmetConditionWithAQuoteTheClauseHoldsAlsoRaises() {
+    void anUnmetConditionWithAQuoteTheClauseHoldsAlsoMakesItPartial() {
         var checker = checkerAnswering(request -> answer("YES",
-                "1 | UNMET | exclusive jurisdiction | the courts are not Swiss courts of the supplier"));
+                condition("1 | UNMET | exclusive jurisdiction | the courts are not Swiss courts")));
 
-        assertThat(checker.check(ask(true)).raises()).isTrue();
+        assertThat(checker.check(ask(true)).outcome()).isEqualTo(FallbackConditionChecker.Result.PARTIAL);
     }
 
     @Test
-    void anUnmetConditionWhoseQuoteNeitherTheClauseNorTheFactsHoldDoesNotRaise() {
+    void anUnmetConditionWhoseQuoteNeitherTheClauseNorTheFactsHoldStaysUnknownAndWithin() {
         var checker = checkerAnswering(request -> answer("YES",
-                "1 | UNMET | the parties agree to arbitration in Paris | the forum is Swiss"));
+                condition("1 | UNMET | the parties agree to arbitration in Paris | the forum is Swiss")));
 
         var result = checker.check(ask(true));
 
-        assertThat(result.raises()).isFalse();
         assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.WITHIN);
-        // an invented quote is no evidence: the condition is recorded as unknown
-        assertThat(result.unknown()).singleElement()
-                .satisfies(condition -> assertThat(condition.text()).isEqualTo("the forum is Swiss"));
+        assertThat(result.conditions()).singleElement().satisfies(condition -> {
+            assertThat(condition.status()).isEqualTo(FallbackConditionSpecs.UNKNOWN);
+            assertThat(condition.quote()).isNull();
+        });
     }
 
     @Test
-    void anUnknownConditionNeverRaisesAndIsKeptForTheLookNote() {
+    void aGroundedConditionTheClauseDoesNotShowIsNotStated() {
         var checker = checkerAnswering(request -> answer("YES",
-                "1 | MET | laws of Switzerland | the law is Swiss",
-                "1 | UNKNOWN | - | the work is delivered from our UK studio"));
+                "1 | UNKNOWN | - | a right for us to suspend performance before termination | "
+                        + CALDER_SOURCE));
+
+        var result = checker.check(calderAsk());
+
+        assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.PARTIAL);
+        assertThat(result.conditions()).singleElement().satisfies(condition -> {
+            assertThat(condition.status()).isEqualTo(FallbackConditionSpecs.NOT_STATED);
+            assertThat(condition.condition())
+                    .isEqualTo("a right for us to suspend performance before termination");
+            assertThat(condition.quote()).isNull();
+        });
+    }
+
+    @Test
+    void oneOfTwoConditionsNotStatedMakesTheFallbackPartial() {
+        var checker = checkerAnswering(request -> answer("YES",
+                "1 | MET | thirty (30) days' notice | a thirty day cure period | " + CALDER_SOURCE,
+                "1 | UNKNOWN | - | a right for us to suspend performance before termination | "
+                        + CALDER_SOURCE));
+
+        var result = checker.check(calderAsk());
+
+        assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.PARTIAL);
+        assertThat(result.conditions()).extracting(FallbackCondition::status)
+                .containsExactly(FallbackConditionSpecs.MET, FallbackConditionSpecs.NOT_STATED);
+    }
+
+    @Test
+    void anUngroundedConditionIsDropped() {
+        var checker = checkerAnswering(request -> answer("YES",
+                condition("1 | MET | laws of Switzerland | the law is Swiss"),
+                condition("1 | UNKNOWN | - | an invented condition", "not in the fallback")));
 
         var result = checker.check(ask(true));
 
-        assertThat(result.raises()).isFalse();
+        assertThat(result.conditions()).singleElement().satisfies(condition ->
+                assertThat(condition.status()).isEqualTo(FallbackConditionSpecs.MET));
         assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.WITHIN);
-        assertThat(result.unknown()).singleElement()
-                .satisfies(condition -> assertThat(condition.text())
-                        .isEqualTo("the work is delivered from our UK studio"));
     }
 
     @Test
-    void whenEveryConditionIsMetTheClauseStaysWithinWithNothingUnknown() {
+    void whenEveryConditionIsMetTheClauseStaysWithinWithNothingNotStated() {
         var checker = checkerAnswering(request -> answer("YES",
-                "1 | MET | laws of Switzerland | the law is Swiss",
-                "1 | MET | Helvetia Cloud AG (SUPPLIER) | the counterparty is Swiss"));
+                condition("1 | MET | laws of Switzerland | the law is Swiss"),
+                condition("1 | MET | Helvetia Cloud AG (SUPPLIER) | the counterparty is Swiss")));
 
         var result = checker.check(ask(true));
 
-        assertThat(result.raises()).isFalse();
-        assertThat(result.unknown()).isEmpty();
-        assertThat(result.conditions()).hasSize(2);
+        assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.WITHIN);
+        assertThat(result.conditions()).hasSize(2)
+                .extracting(FallbackCondition::status)
+                .containsOnly(FallbackConditionSpecs.MET);
     }
 
     @Test
     void aMetConditionWithoutAQuoteTheTextHoldsCountsAsUnknown() {
         var checker = checkerAnswering(request -> answer("YES",
-                "1 | MET | the law is certainly Swiss | the law is Swiss"));
+                condition("1 | MET | the law is certainly Swiss | the law is Swiss")));
 
-        assertThat(checker.check(ask(true)).unknown()).hasSize(1);
+        assertThat(checker.check(ask(true)).conditions()).singleElement()
+                .satisfies(condition -> assertThat(condition.status())
+                        .isEqualTo(FallbackConditionSpecs.UNKNOWN));
     }
 
     @Test
-    void severalFallbacksOnlyRaiseWhenEveryListedFallbackFails() {
+    void severalFallbacksStayWithinWhenOneIsFullyMetAndArePartialOtherwise() {
         var oneStillHolds = checkerAnswering(request -> answer("YES",
-                "1 | UNMET | exclusive jurisdiction | fallback one wants English courts",
-                "2 | MET | laws of Switzerland | fallback two wants Swiss law"));
+                condition("1 | UNMET | exclusive jurisdiction | fallback one wants English courts"),
+                condition("2 | MET | laws of Switzerland | fallback two wants Swiss law")));
         var allFail = checkerAnswering(request -> answer("YES",
-                "1 | UNMET | exclusive jurisdiction | fallback one wants English courts",
-                "2 | UNMET | Studio Ltd of London (CUSTOMER) | fallback two wants a Swiss counterparty"));
+                condition("1 | UNMET | exclusive jurisdiction | fallback one wants English courts"),
+                condition("2 | UNMET | Studio Ltd of London (CUSTOMER) | fallback two wants a Swiss counterparty")));
 
-        assertThat(oneStillHolds.check(ask(true, 2)).raises()).isFalse();
-        assertThat(allFail.check(ask(true, 2)).raises()).isTrue();
+        assertThat(oneStillHolds.check(ask(true, 2)).outcome())
+                .isEqualTo(FallbackConditionChecker.Result.WITHIN);
+        assertThat(allFail.check(ask(true, 2)).outcome())
+                .isEqualTo(FallbackConditionChecker.Result.PARTIAL);
+    }
+
+    @Test
+    void aListedFallbackTheModelDidNotReportIsNotCountedAsFailed() {
+        var onlyFirst = checkerAnswering(request -> answer("YES",
+                condition("1 | UNKNOWN | - | fallback one wants English courts")));
+
+        assertThat(onlyFirst.check(ask(true, 2)).outcome())
+                .isEqualTo(FallbackConditionChecker.Result.WITHIN);
+    }
+
+    @Test
+    void aConditionTakenFromTheWalkAwayIsNotAFallbackCondition() {
+        var checker = checkerAnswering(request -> answer("YES",
+                condition("1 | UNKNOWN | - | a cure period", "No cure period")));
+
+        var result = checker.check(calderAsk());
+
+        assertThat(result.conditions()).isEmpty();
+        assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.INVALID);
+    }
+
+    @Test
+    void aBlankConditionPhraseIsDropped() {
+        var checker = checkerAnswering(request -> answer("YES",
+                "1 | UNKNOWN | - |   | " + CALDER_SOURCE,
+                condition("1 | UNKNOWN | - | a right to suspend performance", CALDER_SOURCE)));
+
+        assertThat(checker.check(calderAsk()).conditions())
+                .extracting(FallbackCondition::condition)
+                .containsExactly("a right to suspend performance");
     }
 
     @Test
     void aPositionWithNoListedFallbackIsCheckedAgainstThePreferredPosition() {
         var fails = checkerAnswering(request -> answer("NO",
-                "1 | UNMET | laws of Switzerland | the clause meets the preferred position"));
+                condition("1 | UNMET | laws of Switzerland | the clause meets the preferred position")));
         var meets = checkerAnswering(request -> answer("NO",
-                "1 | MET | laws of Switzerland | the clause meets the preferred position"));
+                condition("1 | MET | laws of Switzerland | the clause meets the preferred position")));
         var unsure = checkerAnswering(request -> answer("NO",
-                "1 | UNKNOWN | - | the clause meets the preferred position"));
+                condition("1 | MET | the law is certainly Swiss | the clause meets the preferred position")));
 
-        var raised = fails.check(ask(false));
-        assertThat(raised.raises()).isTrue();
-        assertThat(raised.fallbackListed()).isFalse();
-        assertThat(meets.check(ask(false)).raises()).isFalse();
-        // UNKNOWN never raises severity, here either (G4)
-        assertThat(unsure.check(ask(false)).raises()).isFalse();
+        // with no fallback listed there is nothing to be "partly within": no claim is made
+        var shortfall = fails.check(ask(false));
+        assertThat(shortfall.outcome()).isEqualTo(FallbackConditionChecker.Result.WITHIN);
+        assertThat(shortfall.fallbackListed()).isFalse();
+        assertThat(meets.check(ask(false)).outcome()).isEqualTo(FallbackConditionChecker.Result.WITHIN);
+        // an unverifiable quote stays UNKNOWN and never makes the preferred position partial
+        assertThat(unsure.check(ask(false)).outcome()).isEqualTo(FallbackConditionChecker.Result.WITHIN);
     }
 
     @Test
     void forAProsePositionTheModelSaysWhetherAFallbackIsListed() {
         var checker = checkerAnswering(request -> answer("NO",
-                "1 | UNMET | laws of Switzerland | the clause meets the preferred position"));
+                condition("1 | UNMET | laws of Switzerland | the clause meets the preferred position")));
 
         var result = checker.check(ask(null));
 
         assertThat(result.fallbackListed()).isFalse();
-        assertThat(result.raises()).isTrue();
+        // no listed fallback, so nothing is "partly within"
+        assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.WITHIN);
     }
 
     @Test
     void theStateCarriesTheClauseThePositionAndTheContractFacts() {
         var checker = checkerAnswering(request -> answer("YES",
-                "1 | MET | laws of Switzerland | the law is Swiss"));
+                condition("1 | MET | laws of Switzerland | the law is Swiss")));
 
         checker.check(ask(true));
 
         assertThat(requests).singleElement().satisfies(request -> {
             assertThat(request.spec().id()).isEqualTo(FallbackConditionSpecs.SPEC_ID);
+            assertThat(request.spec().version()).isEqualTo(FallbackConditionSpecs.SPEC_VERSION);
             var state = (FallbackConditionSpecs.FallbackConditionState) request.state();
             assertThat(state.clause()).isEqualTo(CLAUSE);
             assertThat(state.position()).isEqualTo(POSITION);
@@ -219,7 +312,7 @@ class FallbackConditionCheckerTest {
         var result = checker.check(ask(true));
 
         assertThat(result.outcome()).isEqualTo(FallbackConditionChecker.Result.UNAVAILABLE);
-        assertThat(result.raises()).isFalse();
+        assertThat(result.answered()).isFalse();
     }
 
     @Test
@@ -249,7 +342,7 @@ class FallbackConditionCheckerTest {
         var wrongShape = checkerAnswering(request -> Map.of(FallbackConditionSpecs.CONDITIONS, "x"));
 
         assertThat(garbled.check(ask(true)).outcome()).isEqualTo(FallbackConditionChecker.Result.INVALID);
-        assertThat(garbled.check(ask(true)).raises()).isFalse();
+        assertThat(garbled.check(ask(true)).answered()).isFalse();
         assertThat(wrongShape.check(ask(true)).outcome()).isEqualTo(FallbackConditionChecker.Result.INVALID);
     }
 
@@ -269,46 +362,29 @@ class FallbackConditionCheckerTest {
     }
 
     @Test
-    void aListedFallbackTheModelDidNotReportIsNotAFailedFallback() {
-        // two fallbacks are listed; the model reports only the first as unmet: the second was never checked
+    void conditionsOutsideTheListedFallbackRangeAreIgnored() {
         var checker = checkerAnswering(request -> answer("YES",
-                "1 | UNMET | exclusive jurisdiction | fallback one wants English courts"));
+                condition("1 | UNMET | exclusive jurisdiction | fallback one wants English courts"),
+                condition("7 | MET | laws of Switzerland | an invented fallback")));
 
-        assertThat(checker.check(ask(true, 2)).raises()).isFalse();
-        assertThat(checker.check(ask(true, 1)).raises()).isTrue();
-    }
+        var result = checker.check(ask(true, 1));
 
-    @Test
-    void fallbackNumbersOutsideTheListedRangeAreIgnored() {
-        var checker = checkerAnswering(request -> answer("YES",
-                "1 | UNMET | exclusive jurisdiction | fallback one wants English courts",
-                "7 | MET | laws of Switzerland | an invented fallback"));
-
-        assertThat(checker.check(ask(true, 1)).raises()).isTrue();
+        assertThat(result.conditions()).singleElement().satisfies(condition ->
+                assertThat(condition.fallback()).isEqualTo(1));
         var onlyInvented = checkerAnswering(request -> answer("YES",
-                "7 | UNMET | exclusive jurisdiction | an invented fallback"));
-        assertThat(onlyInvented.check(ask(true, 1)).raises()).isFalse();
-    }
-
-    @Test
-    void forAProsePositionTheFallbackNumbersMustRunFromOneWithoutGaps() {
-        var gap = checkerAnswering(request -> answer("YES",
-                "1 | UNMET | exclusive jurisdiction | fallback one wants English courts",
-                "3 | UNMET | laws of Switzerland | fallback three wants English law"));
-        var complete = checkerAnswering(request -> answer("YES",
-                "1 | UNMET | exclusive jurisdiction | fallback one wants English courts",
-                "2 | UNMET | laws of Switzerland | fallback two wants English law"));
-
-        assertThat(gap.check(ask(null, null)).raises()).isFalse();
-        assertThat(complete.check(ask(null, null)).raises()).isTrue();
+                condition("7 | UNMET | exclusive jurisdiction | an invented fallback")));
+        assertThat(onlyInvented.check(ask(true, 1)).outcome())
+                .isEqualTo(FallbackConditionChecker.Result.INVALID);
     }
 
     @Test
     void conditionTextIsCappedBeforeItReachesAUserVisibleNote() {
         var long160 = "x".repeat(400);
-        var checker = checkerAnswering(request -> answer("YES", "1 | UNKNOWN | - | " + long160));
+        var checker = checkerAnswering(request -> answer("YES", condition("1 | UNKNOWN | - | " + long160)));
 
-        assertThat(checker.check(ask(true)).unknown()).singleElement()
-                .satisfies(condition -> assertThat(condition.text().length()).isLessThanOrEqualTo(160));
+        assertThat(checker.check(ask(true)).conditions()).singleElement().satisfies(condition -> {
+            assertThat(condition.condition().length()).isLessThanOrEqualTo(160);
+            assertThat(condition.status()).isEqualTo(FallbackConditionSpecs.NOT_STATED);
+        });
     }
 }

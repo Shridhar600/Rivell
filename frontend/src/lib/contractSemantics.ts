@@ -556,7 +556,7 @@ export function profileKey(profile: ReviewProfile | null): string {
  * nothing but was named as though it withheld the control, and a second claim attached to it that a
  * retry was worthwhile. Neither was true, and two of the five reasons collapsed into
  * `SERVICE_UNAVAILABLE` can never succeed on a retry, so the frontend cannot honestly assert
- * suitability: the diagnosis that would decide it is exactly what DW-041 redacted.
+ * suitability: the diagnosis that would decide it is exactly what the tenant projection withholds.
  *
  * <p>Whether a retry should be offered at all for this class, and whether the tenant needs a recovery
  * classification of its own, is an open product decision and is escalated rather than answered here.
@@ -565,7 +565,7 @@ export function profileKey(profile: ReviewProfile | null): string {
 export type EnrichmentFailureNote = { summary: string }
 
 /**
- * Copy for the tenant-facing enrichment failure taxonomy (M10A.1 / DW-041).
+ * Copy for the tenant-facing enrichment failure taxonomy.
  *
  * The five provider-level reasons this replaces were disclosed to tenants even though none of them
  * is actionable by a tenant, and `NO_PROVIDER_CONFIGURED` in particular described the deployment's

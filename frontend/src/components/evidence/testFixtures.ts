@@ -16,6 +16,7 @@ export function fixtureApplicabilityScope(
     jurisdiction: null,
     effectiveFrom: null,
     effectiveTo: null,
+    sourceContractTypes: [],
     ...overrides,
   }
 }

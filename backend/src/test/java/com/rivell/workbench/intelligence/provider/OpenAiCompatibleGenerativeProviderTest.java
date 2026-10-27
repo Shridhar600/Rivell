@@ -297,6 +297,29 @@ class OpenAiCompatibleGenerativeProviderTest {
     }
 
     @Test
+    void anInvalidApiKeyInA200IsRejectedAndNotRetried() {
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> {
+                    calls.incrementAndGet();
+                    return "{\"error\":{\"code\":\"invalid_api_key\","
+                            + "\"type\":\"invalid_request_error\"}}";
+                }),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt", null, null));
+        var service = new GenerativeReasoningService(
+                asset -> new ModelBinding("openai-compatible", "gpt-test"),
+                (GenerativeProviderRegistry) id -> Optional.of(provider),
+                Clock.systemUTC(),
+                new com.rivell.workbench.intelligence.ProviderRetry(
+                        java.util.List.of(java.time.Duration.ZERO, java.time.Duration.ZERO)));
+
+        assertThatThrownBy(() -> service.generate(capSpec(), state("t")))
+                .isExactlyInstanceOf(ProviderRejectedException.class);
+        assertThat(calls).hasValue(1);
+    }
+
+    @Test
     void allowedValuesRejectOutsideEnumValues() {
         var spec = new ReasoningSpec(
                 "cap-spec", 1, "Extract cap facts.", 1,

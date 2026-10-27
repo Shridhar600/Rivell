@@ -146,6 +146,21 @@ public final class FindingAssembler {
     private static Observation observation(RawReviewSignal signal) {
         if (signal.payload() instanceof OmissionPayload omission) {
             // engine v2 omissions lane: the code-owned text, never model prose
+            if (omission.walkAway() != null) {
+                // the position's own walk-away states the right the contract lacks, or matches
+                var walkAway = omission.walkAway().strip();
+                var text = "Your playbook's walk-away: " + walkAway
+                        + (walkAway.endsWith(".") ? "" : ".");
+                if (omission.matchedClause() != null) {
+                    var clause = omission.matchedClause().strip();
+                    return new Observation("MISSING_POSITION", clause.isEmpty()
+                            ? text + " The closest clause matches it."
+                            : text + " The closest clause, " + clause + ", matches it.");
+                }
+                return new Observation("MISSING_POSITION",
+                        text + " Rivell did not find " + omission.label()
+                                + " in this contract.");
+            }
             return new Observation("MISSING_POSITION",
                     "Missing: " + omission.label() + ". Searched " + omission.searchedClauses()
                             + " clauses; none addresses it.");
@@ -164,10 +179,11 @@ public final class FindingAssembler {
                 && signal.payload() instanceof PolicyUnavailablePayload unavailable
                 && PolicyUnavailablePayload.NOT_COVERED.equals(unavailable.sufficiency())) {
             // the assembler sees the run, not the review's profile, so it cannot tell whether a
-            // side is set: the sentence never claims one
+            // side is set, and the triage records a probability, not a reason: the sentence
+            // claims neither
             return new Observation(PolicyUnavailablePayload.NOT_COVERED,
-                    "No playbook position addresses this clause, and it reads as unusual for "
-                            + "this kind of contract.");
+                    "No playbook position covers this clause. It may be unusual for this kind "
+                            + "of contract; check it.");
         }
         if (signal.signalType() == SignalType.POLICY_UNAVAILABLE
                 && signal.payload() instanceof PolicyUnavailablePayload unavailable
@@ -193,6 +209,10 @@ public final class FindingAssembler {
         }
         if (signal.signalType() == SignalType.POLICY_DEVIATION
                 && signal.payload() instanceof PositionDeviationPayload deviation) {
+            if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(deviation.category())
+                    && partiallyWithinFallback(signal)) {
+                return new Observation(observationKind(deviation.category()), partialFallbackText(signal));
+            }
             return new Observation(observationKind(deviation.category()),
                     observationText(deviation.category()));
         }
@@ -277,9 +297,44 @@ public final class FindingAssembler {
                     + "every fallback the position lists.";
             case PolicyComparisonSpecs.WITHIN_FALLBACK -> "The clause departs from the "
                     + "preferred position but stays within a listed fallback; accept and note.";
-            default -> "The clause depends on something outside the contract, so Rivell "
-                    + "cannot tell whether it meets your playbook.";
+            default -> "Depends on terms outside this contract; check them before deciding.";
         };
+    }
+
+    private static boolean partiallyWithinFallback(RawReviewSignal signal) {
+        return FallbackConditionSpecs.PARTIAL.equals(
+                signal.quality().get("fallbackConditionsOutcome"));
+    }
+
+    /**
+     * The clause does not state every condition of the fallback. A condition the check could not
+     * verify is not named here: it reads as "could not check" in the finding's condition list.
+     */
+    private static String partialFallbackText(RawReviewSignal signal) {
+        var notStated = new ArrayList<String>();
+        var unmet = new ArrayList<String>();
+        if (signal.quality().get("fallbackConditions") instanceof List<?> conditions) {
+            for (var item : conditions) {
+                if (item instanceof Map<?, ?> condition
+                        && condition.get("condition") instanceof String text) {
+                    if (FallbackConditionSpecs.NOT_STATED.equals(condition.get("status"))) {
+                        notStated.add(text);
+                    } else if (FallbackConditionSpecs.UNMET.equals(condition.get("status"))) {
+                        unmet.add(text);
+                    }
+                }
+            }
+        }
+        var text = new StringBuilder("Partly within your fallback. ");
+        if (!notStated.isEmpty()) {
+            text.append("The clause does not state: ")
+                    .append(String.join("; ", notStated)).append(". ");
+        }
+        if (!unmet.isEmpty()) {
+            text.append("The clause does not meet: ")
+                    .append(String.join("; ", unmet)).append(". ");
+        }
+        return text.append("Check whether it is elsewhere in the contract.").toString();
     }
 
     private static ProposedAction action(
@@ -365,15 +420,26 @@ public final class FindingAssembler {
                 && List.of(DeviationUncertainPayload.SECOND_OPINION_DISAGREES,
                         DeviationUncertainPayload.SECOND_OPINION_UNAVAILABLE)
                         .contains(uncertain.reason())) {
-            // engine v2: a walk-away or beyond-fallback second opinion raises the look item to MEDIUM
+            // engine v2: a walk-away or beyond-fallback second opinion raises the look item to
+            // MEDIUM, unless the corroboration rule found no second signal to agree with it
             var secondOpinionCategory = primary.quality().get("secondOpinionCategory");
             return DeviationUncertainPayload.SECOND_OPINION_DISAGREES.equals(uncertain.reason())
                     && (PolicyComparisonSpecs.WALK_AWAY.equals(secondOpinionCategory)
                             || PolicyComparisonSpecs.BEYOND_FALLBACK
                                     .equals(secondOpinionCategory))
+                    && r1Corroborated(primary)
                     ? FindingSeverity.MEDIUM : FindingSeverity.LOW;
         }
         return FindingSeverity.MEDIUM;
+    }
+
+    /**
+     * R1 with the corroboration rule on: the comparison tags the disagreement R1:NONE when no
+     * second signal agreed, so it stays a LOW look item. An untagged signal ran with the rule off.
+     */
+    private static boolean r1Corroborated(RawReviewSignal primary) {
+        return !(primary.quality().get("levers") instanceof List<?> levers)
+                || !levers.contains(PolicyComparisonSpecs.R1_NONE);
     }
 
     private static FindingSeverity categorySeverity(String category) {
@@ -418,6 +484,9 @@ public final class FindingAssembler {
                 return FindingClassification.BLOCKING;
             }
             if (PolicyComparisonSpecs.WITHIN_FALLBACK.equals(deviation.category())) {
+                if (partiallyWithinFallback(primary)) {
+                    return FindingClassification.REVIEW_REQUIRED;
+                }
                 return escalation == null
                         ? FindingClassification.INFORMATIONAL
                         : FindingClassification.REVIEW_REQUIRED;
@@ -436,11 +505,17 @@ public final class FindingAssembler {
         // absence-subject findings are grounded in the plan-check/absence identity
         var absenceSubject = primary.subjectKind() == FindingSubjectKind.ABSENCE;
         if (absenceSubject) {
-            var basis = primary.payload() instanceof OmissionPayload
-                    ? "No clause in this contract addresses this playbook position; the "
-                            + "absence is the observation."
-                    : "No clause in this contract carries " + primary.absenceConcept().value()
-                            + "; the absence is the observation.";
+            String basis;
+            if (primary.payload() instanceof OmissionPayload omission) {
+                basis = omission.matchedClause() != null
+                        ? "The closest clause matches your playbook's walk-away; the position it "
+                                + "rules out is what this contract grants."
+                        : "No clause in this contract addresses this playbook position; the "
+                                + "absence is the observation.";
+            } else {
+                basis = "No clause in this contract carries " + primary.absenceConcept().value()
+                        + "; the absence is the observation.";
+            }
             claims.add(FindingClaim.of(0, ClaimKind.ABSENCE_BASIS, basis, true, List.of()));
         } else {
             claims.add(FindingClaim.of(0, ClaimKind.OBSERVATION, observation.text(),
@@ -481,17 +556,11 @@ public final class FindingAssembler {
             claims.add(FindingClaim.of(claims.size(), ClaimKind.GENERATIVE_EXPLANATION,
                     openEnded.explanation(), absenceSubject, evidence));
         }
-        if (primary.quality().get("fallbackConditionsUnknown") instanceof List<?> unknown
-                && !unknown.isEmpty()) {
-            // P3: a look note, never a severity change; the conditions the contract does not settle
-            claims.add(FindingClaim.of(claims.size(), ClaimKind.OBSERVATION,
-                    "Some conditions of the listed fallback could not be checked from the clause or the "
-                            + "contract facts, so please check them yourself: "
-                            + String.join("; ", unknown.stream().map(String::valueOf).toList()) + ".",
-                    absenceSubject, evidence));
-        }
         claims.add(FindingClaim.of(claims.size(), ClaimKind.RECOMMENDATION,
-                recommendation(action, escalation, drafting), absenceSubject, evidence));
+                partiallyWithinFallback(primary) && action == ProposedAction.NO_ACTION
+                        ? "Decide whether the clause is acceptable without these terms, or ask for them."
+                        : recommendation(action, escalation, drafting),
+                absenceSubject, evidence));
         var ordinals = new int[claims.size()];
         for (var index = 0; index < claims.size(); index++) {
             ordinals[index] = claims.get(index).ordinal();
@@ -532,8 +601,9 @@ public final class FindingAssembler {
             "secondOpinionOutcome", "secondOpinionCategory", "secondOpinionQuote",
             "secondOpinionReason", "foundBy", "spottedSeverity", "spottedReason",
             "uncertaintyReason", "searchedClauses", "comparedClauses", "presenceProbability",
-            "positionLabel", "levers", "categoryBeforeLevers", "routeReason", "fallbackListed",
-            "fallbackConditionsOutcome", "fallbackConditionsUnknown", "fallbackConditionsUnmet", "fallbackConditionsExecutionId", "secondOpinionExecutionId", "openEndedOutcome",
+            "absenceProbability", "positionLabel", "levers", "categoryBeforeLevers", "routeReason",
+            "fallbackListed", "fallbackConditionsOutcome", "fallbackConditions",
+            "fallbackConditionsExecutionId", "secondOpinionExecutionId", "openEndedOutcome",
             "fitVerdict", "fitReason", "fitReasons");
 
     /** The typed rule behind an escalation, kept on the finding the panel reads. */
@@ -545,6 +615,14 @@ public final class FindingAssembler {
             RawReviewSignal primary, RawReviewSignal escalation, List<RawReviewSignal> group) {
         var quality = new LinkedHashMap<String, Object>();
         for (var key : ASSESSMENT_KEYS) {
+            var value = primary.quality().get(key);
+            if (value != null) {
+                quality.put(key, value);
+            }
+        }
+        // the absence signal carries the walk-away rule on itself; a deviation carries it
+        // on a separate escalation signal of the same position
+        for (var key : ESCALATION_KEYS) {
             var value = primary.quality().get(key);
             if (value != null) {
                 quality.put(key, value);

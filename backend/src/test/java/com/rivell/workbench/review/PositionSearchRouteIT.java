@@ -159,7 +159,7 @@ class PositionSearchRouteIT {
     }
 
     /**
-     * DW-071 item 1: the route records that the search ran, not that it found something. A
+     * The route records that the search ran, not that it found something. A
      * review with no published playbook still searches every clause; a reader who counts SEARCH
      * checks must see those searches even though every result set was empty.
      */
@@ -289,7 +289,7 @@ class PositionSearchRouteIT {
     }
 
     /**
-     * R2-006: a search-found position that does not govern the clause is not applied. The check
+     * A search-found position that does not govern the clause is not applied. The check
      * records it as "not covered" and the diagnostics keep it visible, with no finding resting on it.
      */
     @Test
@@ -333,7 +333,7 @@ class PositionSearchRouteIT {
     }
 
     /**
-     * DW-085 (spec §6, S14): when the user corrects a clause's topic and removes the machine one,
+     * When the user corrects a clause's topic and removes the machine one,
      * no position pairs with it by topic, so the clause goes to the text search - which used to
      * find the removed topic's positions again and judge them, partly undoing the correction. The
      * search must exclude positions carrying a topic the person removed from that clause, while a
