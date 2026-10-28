@@ -229,6 +229,8 @@ button, input { font: inherit; color: inherit; }
 /* The headline carries its own redline. */
 .rl-del, .rl-ins { position: relative; white-space: nowrap; }
 .rl-del { color: var(--ink-3); }
+.rl-del[data-word] { margin-right: 0.19375em; }
+.rl-del[data-word]::before { content: attr(data-word); }
 .rl-del::after {
   content: "";
   position: absolute;
@@ -377,7 +379,7 @@ ins.tc, .tc-ins { color: var(--teal-ink); text-decoration: underline; text-decor
 /* Teach figure */
 .teach-grid { display: grid; grid-template-columns: 1fr 22px 1fr; gap: 10px; align-items: stretch; }
 .teach-src { border: 1px solid var(--line); border-radius: var(--r-md); padding: 14px; background: var(--sheet-2); }
-.teach-src h5 { font: 600 14px/1.3 var(--doc); margin: 8px 0 10px; }
+.teach-src h4 { font: 600 14px/1.3 var(--doc); margin: 8px 0 10px; }
 .teach-src table { width: 100%; border-collapse: collapse; font: 400 11.5px/1.45 var(--doc); color: var(--doc-ink); }
 .teach-src td { border-top: 1px solid var(--line); padding: 6px 4px; vertical-align: top; }
 .teach-src td:first-child { width: 34%; color: var(--ink-3); font-family: var(--font); font-size: 11px; font-weight: 500; }
