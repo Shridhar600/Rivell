@@ -51,7 +51,7 @@
             <span aria-hidden="true">Every contract, held to <span class="rl-del">their</span> <span class="rl-ins">your</span> standard.</span>
           </h1>
           <div class="hero-sub">
-          <p class="lead">Rivell learns your team's negotiating positions from the playbooks you already keep. It reviews each contract against them, explains every gap, and returns the redline in Word. You make every call.</p>
+          <p class="lead">Rivell learns your negotiating positions from the playbooks you already keep, reviews every contract against them, and returns the redline in Word. You make every call.</p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="/demo/">Try the demo <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h9m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
             <a class="btn btn-ghost" href="#how">See how it works</a>
@@ -60,7 +60,7 @@
         </div>
 
         <div class="stage-track" data-track>
-        <div class="stage-pin" data-pin>
+        <div class="stage-pin canvas" data-pin>
         <div class="stage is-note is-strike is-insert is-verified" data-stage aria-hidden="true">
           <div class="sheet stage-doc">
             <div class="stage-bar">
@@ -106,24 +106,25 @@
     <section class="statement-sec">
       <div class="wrap statement-grid">
         <div>
-          <p class="statement reveal"><span class="dim">Spotting a risky clause is the easy part.</span> Knowing what your team will accept, and saying it in your own words, is the work.</p>
+          <p class="statement reveal"><span class="dim">Spotting a risky clause is easy.</span> Knowing what your team will accept is the work.</p>
         </div>
-        <p class="statement-text reveal">Every legal team has positions: what it prefers, where it can give, where it walks away, and who must approve an exception. These positions live in playbooks, clause libraries and the memory of senior counsel. Rivell applies them to every clause of every contract.</p>
+        <p class="statement-text reveal">Your playbook already says what you prefer, where you can give and where you walk away. Rivell applies it to every clause of every contract.</p>
       </div>
     </section>
 
     <!-- How it works -->
     <section class="how" id="how">
       <div class="wrap">
-        <div class="section-head">
+        <div class="section-head is-split">
           <h2 class="title reveal">From your playbook to a finished redline.</h2>
+          <p class="lead reveal">Four steps, and you make the call at every one of them.</p>
         </div>
 
         <div class="how-grid">
           <ol class="how-steps" data-how>
             <li class="how-step is-active" data-step="0">
               <h3>Teach it your positions</h3>
-              <p>Add the playbooks and clause libraries your team already uses, in Word or Excel. Rivell reads each entry into a clear position: what you prefer, your fallbacks, your walk-away, and who approves an exception. You check every entry against its source before Rivell uses it.</p>
+              <p>Add the playbooks and clause libraries you already use, in Word or Excel. Rivell reads each entry into a position, and you approve every one before it is used.</p>
 
               <figure class="fig" data-fig="0">
                 <div class="sheet fp">
@@ -161,7 +162,7 @@
 
             <li class="how-step" data-step="1">
               <h3>Drop in a contract</h3>
-              <p>Rivell reads the document's structure, works out which side you are on, and checks every clause against each position that applies. It also searches your knowledge for positions a clause touches in different words.</p>
+              <p>Rivell reads the contract, works out which side you are on, and checks every clause against each position that applies, even when the wording differs.</p>
 
               <figure class="fig" data-fig="1">
                 <div class="sheet fp">
@@ -184,7 +185,7 @@
 
             <li class="how-step" data-step="2">
               <h3>See the gap, make the call</h3>
-              <p>Each finding sets what the contract says beside what your playbook says, names the gap, and offers wording your team has already approved. Accept it, edit it, keep the clause as it is, or escalate it to the person who must sign off.</p>
+              <p>Each finding shows the clause, your position and the gap, with wording your team already approved. Accept it, edit it, keep the clause, or escalate it.</p>
 
               <figure class="fig" data-fig="2">
                 <div class="sheet fp">
@@ -223,7 +224,7 @@
 
             <li class="how-step" data-step="3">
               <h3>Send back a clean redline</h3>
-              <p>When every finding is decided, Rivell writes your accepted changes into the original Word file as tracked changes. Then it reads the file back to confirm that each change landed exactly as you approved it.</p>
+              <p>Rivell writes your accepted changes into the original Word file as tracked changes, then reads the file back to check each one.</p>
 
               <figure class="fig" data-fig="3">
                 <div class="fp">
@@ -256,12 +257,30 @@
       </div>
     </section>
 
+    <!-- The real workspace -->
+    <section class="real" id="workspace">
+      <div class="wrap">
+        <div class="section-head is-split">
+          <h2 class="title reveal">One screen for every decision.</h2>
+          <p class="lead reveal">The findings are on the left, the contract and its tracked changes in the middle, and your playbook, the gap and the suggested wording on the right.</p>
+        </div>
+        <figure class="shot reveal">
+          <div class="canvas">
+            <div class="window">
+              <img src="/assets/media/workspace-1440.webp" srcset="/assets/media/workspace-1440.webp 1440w, /assets/media/workspace-2880.webp 2880w" sizes="(max-width: 1240px) 92vw, 1100px" width="2880" height="1800" loading="lazy" decoding="async" alt="The Rivell review workspace. On the left, ten findings for the Kestrel master services agreement. In the middle, the indemnities clause with tracked changes. On the right, the finding with the playbook position, the gap and the suggested wording.">
+            </div>
+          </div>
+          <figcaption>The review workspace, on the demo contracts.</figcaption>
+        </figure>
+      </div>
+    </section>
+
     <!-- Your standard -->
     <section class="standard" id="standard">
       <div class="wrap">
-        <div class="section-head">
+        <div class="section-head is-split">
           <h2 class="title reveal">Change the standard, and the review follows.</h2>
-          <p class="lead reveal">Rivell has no opinion of its own about a good contract. It applies yours. Set a payment position and watch the same three contracts change their answer.</p>
+          <p class="lead reveal">Rivell has no opinion of its own. It applies yours. Move the sliders and watch three contracts change their answer.</p>
         </div>
 
         <div class="std reveal" data-standard>
@@ -336,7 +355,7 @@
       <div class="wrap teaser">
         <div class="teaser-copy">
           <h2 class="title reveal">Most of the judgment comes from a System One model.</h2>
-          <p class="lead reveal">Jev, a System One decision model, answers narrow questions about each clause and says how sure it is. A sure answer becomes a finding. A close call goes to a language model for a second look, and a disagreement comes to you. Hybrid search finds positions a clause states in other words, and plain code sets severity and checks the Word file.</p>
+          <p class="lead reveal">Jev, a System One decision model, judges each clause and says how sure it is. Close calls get a second opinion from a language model, and disagreements come to you. Plain code sets severity and checks the Word file.</p>
           <p class="reveal"><a class="link" href="/technology/">See how the engine works <svg class="arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h9m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a></p>
         </div>
 
