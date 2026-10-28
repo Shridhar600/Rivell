@@ -106,7 +106,13 @@ public class PrecedentLane {
         var lanes = new java.util.LinkedHashMap<String, List<RankFusion.LaneHit>>();
         lanes.put("lexical", lanesOf(lexicalHits));
         lanes.put("vector", lanesOf(vectorHits));
-        var fused = bounded(RankFusion.fuse(lanes), properties.fusionLimit());
+        var contentKeys = new java.util.LinkedHashMap<UUID, String>();
+        for (var entry : byId.entrySet()) {
+            var candidate = entry.getValue();
+            contentKeys.put(entry.getKey(), candidate.effectiveTitle() + "\n"
+                    + java.util.Objects.toString(candidate.effectiveContentText(), ""));
+        }
+        var fused = bounded(RankFusion.fuse(lanes, contentKeys), properties.fusionLimit());
 
         var stages = new ArrayList<RetrievalTrace.StageSummary>();
         stages.add(stage("structured", byId.size(), idStrings(ids), null));

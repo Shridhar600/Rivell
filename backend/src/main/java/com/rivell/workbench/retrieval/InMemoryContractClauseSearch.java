@@ -59,6 +59,10 @@ public final class InMemoryContractClauseSearch implements ContractClauseSearch 
         } else {
             degradation.add("VECTOR_LANE_UNCONFIGURED");
         }
+        var contentKeys = new LinkedHashMap<UUID, String>();
+        for (var clause : clauses) {
+            contentKeys.put(clause.headingNodeId(), clause.text() == null ? "" : clause.text());
+        }
         var result = new ArrayList<List<Hit>>(queries.size());
         for (int index = 0; index < queries.size(); index++) {
             var lexical = lexicalLane(queries.get(index), clauses);
@@ -68,7 +72,7 @@ public final class InMemoryContractClauseSearch implements ContractClauseSearch 
             var lanes = new LinkedHashMap<String, List<RankFusion.LaneHit>>();
             lanes.put("lexical", lexical);
             lanes.put("vector", vector);
-            result.add(hits(RankFusion.fuse(lanes), lexical, vector, limit));
+            result.add(hits(RankFusion.fuse(lanes, contentKeys), lexical, vector, limit));
         }
         return new Result(List.copyOf(result), List.copyOf(degradation));
     }

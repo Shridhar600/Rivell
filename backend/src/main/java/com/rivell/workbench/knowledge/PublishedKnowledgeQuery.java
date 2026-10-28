@@ -33,12 +33,14 @@ public record PublishedKnowledgeQuery(
         LocalDate effectiveOn,
         int limit,
         /**
-         * Keyset cursor for the newest-first order: only rows strictly older than this
-         * {@code (created_at, id)} pair are returned, so a pass can walk a corpus larger than
-         * one page without re-reading the same newest rows.
+         * Keyset cursor for the newest-first order: only rows strictly after this
+         * {@code (created_at, raw_label, content_text, id)} tuple are returned, so a pass can
+         * walk a corpus larger than one page without re-reading the same newest rows.
          */
         Instant afterCreatedAt,
-        UUID afterId) {
+        UUID afterId,
+        String afterRawLabel,
+        String afterContentText) {
 
     private static final int DEFAULT_LIMIT = 50;
 
@@ -52,9 +54,14 @@ public record PublishedKnowledgeQuery(
         if (limit < 1) {
             throw new IllegalArgumentException("limit must be positive");
         }
+        afterContentText = afterContentText == null ? "" : afterContentText;
         if ((afterCreatedAt == null) != (afterId == null)) {
             throw new IllegalArgumentException(
                     "a keyset cursor needs both afterCreatedAt and afterId");
+        }
+        if (afterCreatedAt != null && afterRawLabel == null) {
+            throw new IllegalArgumentException(
+                    "a keyset cursor needs the cursor row's raw label");
         }
         if (afterCreatedAt != null && !topicKeys.isEmpty()) {
             throw new IllegalArgumentException(
@@ -67,17 +74,20 @@ public record PublishedKnowledgeQuery(
         return new PublishedKnowledgeQuery(organizationId, asOfPublicationNumber, candidateTypes,
                 legalConceptKey, topicKeys, primaryTopicKey, contractPackKey, contractType,
                 partyPerspective, paperSource, jurisdiction, effectiveOn, limit, afterCreatedAt,
-                afterId);
+                afterId, afterRawLabel, afterContentText);
     }
 
     /**
-     * The next page of the newest-first order, strictly older than the given row. Topic
-     * membership has its own order and does not accept a cursor.
+     * The next page of the newest-first order, strictly after the given row. Topic membership
+     * has its own order and does not accept a cursor.
      */
-    public PublishedKnowledgeQuery after(Instant createdAt, UUID id) {
+    public PublishedKnowledgeQuery after(PublishedCandidate cursor) {
+        var candidate = cursor.candidate();
         return new PublishedKnowledgeQuery(organizationId, asOfPublicationNumber, candidateTypes,
                 legalConceptKey, topicKeys, primaryTopicKey, contractPackKey, contractType,
-                partyPerspective, paperSource, jurisdiction, effectiveOn, limit, createdAt, id);
+                partyPerspective, paperSource, jurisdiction, effectiveOn, limit,
+                candidate.createdAt(), candidate.id(), candidate.rawLabel(),
+                candidate.contentText() == null ? "" : candidate.contentText());
     }
 
     public static PublishedKnowledgeQuery unpublishedNever(
@@ -87,7 +97,7 @@ public record PublishedKnowledgeQuery(
             LocalDate effectiveOn) {
         return new PublishedKnowledgeQuery(organizationId, asOfPublicationNumber, candidateTypes,
                 legalConceptKey, Set.of(), null, contractPackKey, contractType, partyPerspective,
-                paperSource, jurisdiction, effectiveOn, DEFAULT_LIMIT, null, null);
+                paperSource, jurisdiction, effectiveOn, DEFAULT_LIMIT, null, null, null, null);
     }
 
     /** Topic-membership resolution for policy comparison (design 6a item 2). */
@@ -98,6 +108,6 @@ public record PublishedKnowledgeQuery(
             String jurisdiction, LocalDate effectiveOn, int limit) {
         return new PublishedKnowledgeQuery(organizationId, asOfPublicationNumber, candidateTypes,
                 null, topicKeys, primaryTopicKey, contractPackKey, contractType, partyPerspective,
-                paperSource, jurisdiction, effectiveOn, limit, null, null);
+                paperSource, jurisdiction, effectiveOn, limit, null, null, null, null);
     }
 }

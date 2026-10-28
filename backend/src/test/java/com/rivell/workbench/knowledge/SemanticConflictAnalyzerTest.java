@@ -103,6 +103,29 @@ class SemanticConflictAnalyzerTest {
     }
 
     @Test
+    void peerLimitUsesRecencyThenContentNotTheCallersListOrder() {
+        var organizationId = UUID.randomUUID();
+        var candidate = position(organizationId, "Subject position", "Subject wording",
+                Set.of("MSA"));
+        var peers = List.of(
+                position(organizationId, "Zeta position", "Zeta wording", Set.of("MSA")),
+                position(organizationId, "Epsilon position", "Epsilon wording", Set.of("MSA")),
+                position(organizationId, "Beta position", "Beta wording", Set.of("MSA")),
+                position(organizationId, "Alpha position", "Alpha wording", Set.of("MSA")),
+                position(organizationId, "Delta position", "Delta wording", Set.of("MSA")),
+                position(organizationId, "Gamma position", "Gamma wording", Set.of("MSA")));
+        var labels = peers.stream().collect(java.util.stream.Collectors.toMap(
+                KnowledgeCandidate::id, KnowledgeCandidate::rawLabel));
+
+        var signals = analyzer().inspect(candidate, peers);
+
+        assertThat(signals)
+                .extracting(signal -> labels.get(signal.publishedCandidateId()))
+                .containsExactly("Alpha position", "Beta position", "Delta position",
+                        "Epsilon position", "Gamma position");
+    }
+
+    @Test
     void codesAreComparedTheWayRetrievalNormalizesThem() {
         var organizationId = UUID.randomUUID();
         var lowerCase = record(organizationId, "Payment terms",

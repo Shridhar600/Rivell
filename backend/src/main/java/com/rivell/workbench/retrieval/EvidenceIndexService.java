@@ -90,6 +90,10 @@ public class EvidenceIndexService {
         var pendingIds = new java.util.ArrayList<>(texts.keySet());
         pendingIds.removeAll(repository.findEmbeddingReadyIds(
                 organizationId, pendingIds, properties.indexVersion()));
+        // Candidate ids are random, so sorting the batch by content makes the same
+        // knowledge request the same inputs in the same order on every run.
+        pendingIds.sort(java.util.Comparator.comparing(
+                (UUID candidateId) -> java.util.Objects.toString(texts.get(candidateId), "")));
         // Retry after the readiness read: publication calls this inside an AFTER_COMMIT listener,
         // where a failed CREATE INDEX can abort the connection's implicit transaction. The read
         // must happen first; the persistence failures that follow are contained per candidate.
