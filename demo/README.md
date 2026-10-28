@@ -1,0 +1,74 @@
+# The Bramber demo data
+
+`demo/` holds a small, local demo of Rivell built from a real run on the fictional
+Bramber Software corpus. It needs Docker and Java 21. It needs no model keys: the seed
+replays a recording of the real run.
+
+## What is here
+
+- `corpus/knowledge/` — four knowledge sources: the commercial contracts playbook, the
+  clause library, the data protection playbook and the NDA playbook.
+- `corpus/contracts/` — five contracts: the Kestrel MSA, order form and statement of work,
+  the Vantage data processing agreement, and the Sablepoint mutual NDA.
+- `config.json` — the reviewed driver config: each source's manifest and phase, each
+  contract's enrichment profile, stage, phase and the knowledge it must apply.
+- `run.env` — the non-secret application identity and model flags shared by the record run
+  and every replay.
+- `decisions/decisions.json` — the reviewed human decisions, written by a person from the
+  real findings after the record run. No generated ids appear in it.
+- `recordings/calls.jsonl.gz` — the recorded model traffic. It contains request and
+  response bodies only: never headers, keys or provider credentials.
+
+## Seed it
+
+```bash
+# 1. Build the backend once (skip if backend/target has a recent jar)
+cd backend && ./mvnw -q -DskipTests package && cd ..
+
+# 2. Start PostgreSQL, replay the recorded calls, and build the demo state
+scripts/demo/seed.sh
+
+# 3. Frontend on http://localhost:5173 (in a second terminal)
+cd frontend
+cp .env.example .env
+npm ci
+npm run dev
+```
+
+`seed.sh` leaves the backend and the local model tape running. Stop them, and remove the
+database container, with `scripts/demo/stop.sh`.
+
+## What the seed does
+
+It starts a fresh PostgreSQL container, starts `scripts/demo/tape.py` in replay mode on
+the recording, and starts the backend pointed at the tape for all three model ports. It
+then runs `scripts/demo/demo_driver.py` against an empty database with dummy keys, the
+background worker on and retrieval reconciliation off. The driver uploads and publishes
+the knowledge, uploads and enriches the contracts, runs the reviews, applies the reviewed
+decisions, finalizes, produces the redlines and verifies them independently. A replay
+miss answers 502 and stops the run: the seed never degrades into a state that is smaller
+than the recording.
+
+## Why there are no answer keys
+
+The corpus is the demo input, not an evaluation set. Answer keys, briefs and run logs live
+in the private context repository. Nothing in `demo/` names an eval set.
+
+## How the recording was made
+
+The tape runs in record mode between the backend and the real providers. The CTO runs
+`scripts/demo/record.sh --phase a`, writes the base decisions from the real findings,
+runs `--phase b`, writes the C5 decisions, and runs `--phase c`. The tour's second human
+decision point exists because C5's findings do not exist until the NDA playbook is
+published after the base reviews. `--recover` resets the database and serves every
+already-recorded call while forwarding only genuinely new requests. After the three
+phases, `tape.py --pack` sorts and deduplicates the calls into `calls.jsonl.gz`, and a
+full offline `seed.sh` from an empty database is the acceptance check.
+
+## Honesty rules
+
+- Every recorded answer is real model output from that run. Nothing is edited or invented.
+- A replay miss fails the run; it never calls a provider and never silently drops output.
+- The tape writes no request headers, and `tape.py --check` refuses a recording that
+  contains a header-looking field, `Bearer ` or a key-shaped string.
+- Knowledge has no expiry, so a replay months later applies the same set as the run.
