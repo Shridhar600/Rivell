@@ -57,8 +57,20 @@
       });
     });
 
-    if (reduce && svg.pauseAnimations) svg.pauseAnimations();
-    if (reduce) svg.querySelector('.packets').style.display = 'none';
+    // The packets make one pass when the diagram comes into view, then rest.
+    var packets = svg.querySelector('.packets');
+    if (reduce || !('IntersectionObserver' in window)) {
+      packets.style.display = 'none';
+    } else {
+      var once = new IntersectionObserver(function (entries) {
+        if (!entries[0].isIntersecting) return;
+        once.disconnect();
+        packets.querySelectorAll('animateMotion').forEach(function (a, i) {
+          setTimeout(function () { a.beginElement(); }, i * 900);
+        });
+      }, { threshold: 0.4 });
+      once.observe(svg);
+    }
   }
 
   // One clause, step by step.
@@ -66,10 +78,8 @@
   if (journey) {
     var steps = journey.querySelectorAll('.j-step');
     var panels = journey.querySelectorAll('[data-panel]');
-    var autoBtn = journey.querySelector('[data-j="auto"]');
     var caption = journey.querySelector('[data-j-caption]');
     var current = 0;
-    var timer = null;
 
     var bars = function (scope, on) {
       scope.querySelectorAll('.fill').forEach(function (f) { f.style.width = on ? f.getAttribute('data-w') + '%' : '0'; });
@@ -85,28 +95,18 @@
         bars(p, j === current);
       });
       var step = steps[current];
-      caption.innerHTML = '<span class="n">' + step.querySelector('.n').textContent + '</span><b>' +
+      caption.innerHTML = '<span class="n">Step ' + (current + 1) + ' of ' + steps.length + '</span><b>' +
         step.querySelector('.h').textContent + '</b><p>' + step.querySelector('.d p').textContent + '</p>';
     };
-    var stopAuto = function () {
-      clearInterval(timer);
-      timer = null;
-      autoBtn.setAttribute('aria-pressed', 'false');
-      autoBtn.textContent = 'Play steps';
-    };
-    var startAuto = function () {
-      if (timer) return;
-      autoBtn.setAttribute('aria-pressed', 'true');
-      autoBtn.textContent = 'Pause';
-      timer = setInterval(function () { go(current + 1); }, 4200);
-    };
-
     steps.forEach(function (s, j) {
-      s.querySelector('button').addEventListener('click', function () { stopAuto(); go(j); });
+      var button = s.querySelector('button');
+      var detail = s.querySelector('.d');
+      detail.id = 'j-step-' + j;
+      button.setAttribute('aria-controls', detail.id);
+      button.addEventListener('click', function () { go(j); });
     });
-    journey.querySelector('[data-j="prev"]').addEventListener('click', function () { stopAuto(); go(current - 1); });
-    journey.querySelector('[data-j="next"]').addEventListener('click', function () { stopAuto(); go(current + 1); });
-    autoBtn.addEventListener('click', function () { if (timer) stopAuto(); else startAuto(); });
+    journey.querySelector('[data-j="prev"]').addEventListener('click', function () { go(current - 1); });
+    journey.querySelector('[data-j="next"]').addEventListener('click', function () { go(current + 1); });
     go(0);
 
     // Hold the panel area at the height of the tallest panel, so the page does not jump.
@@ -120,14 +120,6 @@
     window.addEventListener('resize', fit);
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
 
-    if (!reduce && 'IntersectionObserver' in window) {
-      var started = false;
-      new IntersectionObserver(function (entries) {
-        var inView = entries[0].isIntersecting;
-        if (inView && !started) { started = true; startAuto(); }
-        if (!inView && timer) stopAuto();
-      }, { threshold: 0.45 }).observe(journey);
-    }
   }
 
   // Static likelihood bars fill when they come into view.

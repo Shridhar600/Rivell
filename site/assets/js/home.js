@@ -151,7 +151,7 @@
       if (enabled) {
         pinTop = navH + Math.max(8, (room - height) / 2);
         pin.style.top = pinTop + 'px';
-        stageTrack.style.setProperty('--stageTrack', Math.round(window.innerHeight * 0.7 * scenes.length) + 'px');
+        stageTrack.style.setProperty('--track', Math.round(window.innerHeight * 0.7 * scenes.length) + 'px');
         update();
       } else {
         pin.style.top = '';
