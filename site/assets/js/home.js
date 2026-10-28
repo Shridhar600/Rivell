@@ -142,7 +142,30 @@
         bar.style.transform = 'scaleX(' + (j < i ? 1 : j > i ? 0 : local) + ')';
       });
     };
+    // Every clause gets the same frame, sized to the tallest one, so the boxes never resize mid-scroll.
+    var doc = stage.querySelector('.stage-doc');
+    var note = stage.querySelector('.stage-note');
+    var lock = function () {
+      var keepScene = current;
+      var keepStep = step < 0 ? 0 : step;
+      var tallDoc = 0;
+      var tallNote = 0;
+      doc.style.minHeight = '';
+      note.style.minHeight = '';
+      scenes.forEach(function (scene) {
+        fill(scene);
+        show(6);
+        tallDoc = Math.max(tallDoc, doc.offsetHeight);
+        tallNote = Math.max(tallNote, note.offsetHeight);
+      });
+      doc.style.minHeight = tallDoc + 'px';
+      note.style.minHeight = tallNote + 'px';
+      fill(scenes[keepScene]);
+      show(keepStep);
+    };
+
     var measure = function () {
+      lock();
       var navH = nav ? nav.offsetHeight : 0;
       var room = window.innerHeight - navH;
       var height = pin.offsetHeight;

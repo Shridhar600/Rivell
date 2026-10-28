@@ -98,15 +98,60 @@
       caption.innerHTML = '<span class="n">Step ' + (current + 1) + ' of ' + steps.length + '</span><b>' +
         step.querySelector('.h').textContent + '</b><p>' + step.querySelector('.d p').textContent + '</p>';
     };
+    // On wide screens the walkthrough pins and scrolling moves through the steps.
+    // Clicking a step or an arrow scrolls to that step, so scroll and selection never disagree.
+    var track = journey.closest('[data-j-track]');
+    var jpin = journey.closest('[data-j-pin]');
+    var nav = document.querySelector('[data-nav]');
+    var wideScreen = window.matchMedia('(min-width: 961px)');
+    var pinned = false;
+    var pinTop = 0;
+    var ticking = false;
+
+    var jupdate = function () {
+      ticking = false;
+      if (!pinned) return;
+      var rect = track.getBoundingClientRect();
+      var distance = rect.height - jpin.offsetHeight;
+      var p = Math.min(Math.max((pinTop - rect.top) / distance, 0), 0.9999);
+      var i = Math.floor(p * steps.length);
+      if (i !== current) go(i);
+    };
+    var jmeasure = function () {
+      var navH = nav ? nav.offsetHeight : 0;
+      var room = window.innerHeight - navH;
+      pinned = !reduce && wideScreen.matches && jpin.offsetHeight <= room - 16;
+      track.classList.toggle('is-scroll', pinned);
+      if (pinned) {
+        pinTop = navH + Math.max(8, (room - jpin.offsetHeight) / 2);
+        jpin.style.top = pinTop + 'px';
+        track.style.setProperty('--j-track', Math.round(window.innerHeight * 0.4 * steps.length) + 'px');
+        jupdate();
+      } else {
+        jpin.style.top = '';
+      }
+    };
+    var select = function (i) {
+      if (!pinned) { go(i); return; }
+      i = Math.max(0, Math.min(steps.length - 1, i));
+      var rect = track.getBoundingClientRect();
+      var distance = rect.height - jpin.offsetHeight;
+      var y = window.scrollY + rect.top - pinTop + (i + 0.5) / steps.length * distance;
+      window.scrollTo({ top: y, behavior: reduce ? 'auto' : 'smooth' });
+    };
+
     steps.forEach(function (s, j) {
       var button = s.querySelector('button');
       var detail = s.querySelector('.d');
       detail.id = 'j-step-' + j;
       button.setAttribute('aria-controls', detail.id);
-      button.addEventListener('click', function () { go(j); });
+      button.addEventListener('click', function () { select(j); });
     });
-    journey.querySelector('[data-j="prev"]').addEventListener('click', function () { go(current - 1); });
-    journey.querySelector('[data-j="next"]').addEventListener('click', function () { go(current + 1); });
+    journey.querySelector('[data-j="prev"]').addEventListener('click', function () { select(current - 1); });
+    journey.querySelector('[data-j="next"]').addEventListener('click', function () { select(current + 1); });
+    window.addEventListener('scroll', function () {
+      if (!ticking) { ticking = true; window.requestAnimationFrame(jupdate); }
+    }, { passive: true });
     go(0);
 
     // Hold the panel area at the height of the tallest panel, so the page does not jump.
@@ -116,9 +161,10 @@
       panels.forEach(function (p) { tallest = Math.max(tallest, p.offsetHeight); });
       screen.style.minHeight = tallest + 'px';
     };
-    fit();
-    window.addEventListener('resize', fit);
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+    var layout = function () { fit(); jmeasure(); };
+    layout();
+    window.addEventListener('resize', layout);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(layout);
 
   }
 
