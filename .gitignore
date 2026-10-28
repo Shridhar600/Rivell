@@ -72,3 +72,6 @@ var/
 /experiments/
 
 .agent-scratch/
+
+# Demo tape recording (the packed .jsonl.gz is committed)
+/demo/recordings/*.jsonl
