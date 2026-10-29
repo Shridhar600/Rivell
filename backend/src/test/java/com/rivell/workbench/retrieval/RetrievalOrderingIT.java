@@ -156,6 +156,36 @@ class RetrievalOrderingIT {
     }
 
     @Test
+    void keysetResumptionFollowsTheConceptTieBreakWhenLabelAndTextAreIdentical() {
+        var organizationId = UUID.randomUUID();
+        var artifactId = UUID.randomUUID();
+        // Same time, label and text; the concept orders them. The concept-first row has the
+        // higher id, so a cursor that ignores the concept would skip the other row.
+        var first = highId(6);
+        var second = lowId(6);
+        var createdAt = Instant.parse("2026-01-01T00:00:00Z");
+        insertArtifact(artifactId, organizationId, createdAt);
+        var unitA = insertUnit(artifactId, organizationId, 0, "Shared position", createdAt);
+        var unitB = insertUnit(artifactId, organizationId, 1, "Shared position", createdAt);
+        insertCandidate(first, artifactId, organizationId, unitA, "Shared position",
+                "Shared content", "ASSIGNMENT", "{ASSIGNMENT}", createdAt);
+        insertCandidate(second, artifactId, organizationId, unitB, "Shared position",
+                "Shared content", "NOTICES", "{NOTICES}", createdAt);
+        insertPublication(organizationId, createdAt, first, second);
+
+        var query = PublishedKnowledgeQuery.unpublishedNever(organizationId, 1,
+                Set.of(CandidateType.PLAYBOOK_RULE), null, null, null, null, null, null,
+                LocalDate.of(2026, 1, 1));
+        var all = knowledge.findPublishedCandidatesAsOf(query);
+        assertThat(all).extracting(candidate -> candidate.candidate().id())
+                .containsExactly(first, second);
+        var rest = knowledge.findPublishedCandidatesAsOf(query.after(all.get(0)));
+
+        assertThat(rest).extracting(candidate -> candidate.candidate().id())
+                .containsExactly(second);
+    }
+
+    @Test
     void lexicalTiesAreBrokenByContentHashNotByCandidateId() {
         var organizationId = UUID.randomUUID();
         var low = lowId(4);

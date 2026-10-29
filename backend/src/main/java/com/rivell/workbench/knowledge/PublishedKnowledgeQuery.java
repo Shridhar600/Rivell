@@ -34,13 +34,14 @@ public record PublishedKnowledgeQuery(
         int limit,
         /**
          * Keyset cursor for the newest-first order: only rows strictly after this
-         * {@code (created_at, raw_label, content_text, id)} tuple are returned, so a pass can
+         * {@code (created_at, raw_label, content_text, concept, id)} tuple are returned, so a pass can
          * walk a corpus larger than one page without re-reading the same newest rows.
          */
         Instant afterCreatedAt,
         UUID afterId,
         String afterRawLabel,
-        String afterContentText) {
+        String afterContentText,
+        String afterConceptKey) {
 
     private static final int DEFAULT_LIMIT = 50;
 
@@ -55,6 +56,7 @@ public record PublishedKnowledgeQuery(
             throw new IllegalArgumentException("limit must be positive");
         }
         afterContentText = afterContentText == null ? "" : afterContentText;
+        afterConceptKey = afterConceptKey == null ? "" : afterConceptKey;
         if ((afterCreatedAt == null) != (afterId == null)) {
             throw new IllegalArgumentException(
                     "a keyset cursor needs both afterCreatedAt and afterId");
@@ -74,7 +76,7 @@ public record PublishedKnowledgeQuery(
         return new PublishedKnowledgeQuery(organizationId, asOfPublicationNumber, candidateTypes,
                 legalConceptKey, topicKeys, primaryTopicKey, contractPackKey, contractType,
                 partyPerspective, paperSource, jurisdiction, effectiveOn, limit, afterCreatedAt,
-                afterId, afterRawLabel, afterContentText);
+                afterId, afterRawLabel, afterContentText, afterConceptKey);
     }
 
     /**
@@ -87,7 +89,8 @@ public record PublishedKnowledgeQuery(
                 legalConceptKey, topicKeys, primaryTopicKey, contractPackKey, contractType,
                 partyPerspective, paperSource, jurisdiction, effectiveOn, limit,
                 candidate.createdAt(), candidate.id(), candidate.rawLabel(),
-                candidate.contentText() == null ? "" : candidate.contentText());
+                candidate.contentText() == null ? "" : candidate.contentText(),
+                candidate.effectiveConceptKey() == null ? "" : candidate.effectiveConceptKey());
     }
 
     public static PublishedKnowledgeQuery unpublishedNever(
@@ -97,7 +100,7 @@ public record PublishedKnowledgeQuery(
             LocalDate effectiveOn) {
         return new PublishedKnowledgeQuery(organizationId, asOfPublicationNumber, candidateTypes,
                 legalConceptKey, Set.of(), null, contractPackKey, contractType, partyPerspective,
-                paperSource, jurisdiction, effectiveOn, DEFAULT_LIMIT, null, null, null, null);
+                paperSource, jurisdiction, effectiveOn, DEFAULT_LIMIT, null, null, null, null, null);
     }
 
     /** Topic-membership resolution for policy comparison (design 6a item 2). */
@@ -108,6 +111,6 @@ public record PublishedKnowledgeQuery(
             String jurisdiction, LocalDate effectiveOn, int limit) {
         return new PublishedKnowledgeQuery(organizationId, asOfPublicationNumber, candidateTypes,
                 null, topicKeys, primaryTopicKey, contractPackKey, contractType, partyPerspective,
-                paperSource, jurisdiction, effectiveOn, limit, null, null, null, null);
+                paperSource, jurisdiction, effectiveOn, limit, null, null, null, null, null);
     }
 }

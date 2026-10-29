@@ -729,12 +729,15 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
                     + " or (c.raw_label = :afterRawLabel"
                     + " and (coalesce(c.content_text, '') > :afterContentText"
                     + " or (coalesce(c.content_text, '') = :afterContentText"
-                    + " and c.id > cast(:afterId as uuid)))))))");
+                    + " and (coalesce(c.effective_concept_key, '') > :afterConceptKey"
+                    + " or (coalesce(c.effective_concept_key, '') = :afterConceptKey"
+                    + " and c.id > cast(:afterId as uuid)))))))))");
             params.put("afterCreatedAt",
                     OffsetDateTime.ofInstant(query.afterCreatedAt(), ZoneOffset.UTC));
             params.put("afterId", query.afterId().toString());
             params.put("afterRawLabel", query.afterRawLabel());
             params.put("afterContentText", query.afterContentText());
+            params.put("afterConceptKey", query.afterConceptKey());
         }
         // a candidate has at most one ADD publication (DB-enforced), so this join
         // cannot fan out; it both constrains pin visibility and exposes the
