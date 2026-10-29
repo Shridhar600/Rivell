@@ -58,4 +58,7 @@ export const appRoutes = [
   },
 ]
 
-export const router = createBrowserRouter(appRoutes)
+export const router = createBrowserRouter(appRoutes, {
+  // Normal builds use '/', which is the same behaviour as before. The demo build sets '/demo/'.
+  basename: import.meta.env.BASE_URL,
+})
