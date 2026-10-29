@@ -1,0 +1,499 @@
+{
+  "state": "tour-c5-decided",
+  "capturedAt": "2026-10-28T22:42:03Z",
+  "responses": {
+    "GET /api/reviews": {
+      "status": 200,
+      "body": {
+        "data": {
+          "items": [
+            {
+              "id": "d2235111-1381-4ee9-9503-9749d3b76a2a",
+              "contractId": "c1fde14e-f4ad-40ec-a8ec-24c4af87a45f",
+              "contractVersionNumber": 1,
+              "contractFilename": "Sablepoint Analytics - Mutual NDA.docx",
+              "uploadedAt": "2026-10-28T22:41:58.013837Z",
+              "status": "COMPLETED",
+              "failure": null,
+              "createdAt": "2026-10-28T22:41:58.102164Z",
+              "startedAt": "2026-10-28T22:42:00.665410Z",
+              "completedAt": "2026-10-28T22:42:00.982524Z",
+              "activeRunNumber": 1,
+              "activeRunStatus": "COMPLETED",
+              "latestRunStatus": null,
+              "plannedChecks": 23,
+              "completedChecks": 23,
+              "degradedChecks": 0,
+              "failedChecks": 0,
+              "signals": 3,
+              "findings": 3,
+              "context": {
+                "contractType": "MNDA",
+                "ourSideRole": "PARTY_A",
+                "paperSource": "COUNTERPARTY_PAPER",
+                "jurisdiction": "US"
+              },
+              "humanReview": {
+                "status": "READY_FOR_COMPLETION",
+                "actionableFindings": 3,
+                "resolvedFindings": 3,
+                "remainingFindings": 0,
+                "escalated": 0,
+                "readyToFinalize": true,
+                "blockers": []
+              },
+              "finalization": null,
+              "redline": null
+            },
+            {
+              "id": "83ba0902-85e1-4753-8e80-bcf2793f26a3",
+              "contractId": "7536fcb2-901f-4368-9821-6a461307fbff",
+              "contractVersionNumber": 1,
+              "contractFilename": "Vantage Health - Data Processing Agreement.docx",
+              "uploadedAt": "2026-10-28T22:41:46.517701Z",
+              "status": "COMPLETED",
+              "failure": null,
+              "createdAt": "2026-10-28T22:41:46.685229Z",
+              "startedAt": "2026-10-28T22:41:50.656674Z",
+              "completedAt": "2026-10-28T22:41:51.028792Z",
+              "activeRunNumber": 1,
+              "activeRunStatus": "COMPLETED",
+              "latestRunStatus": null,
+              "plannedChecks": 20,
+              "completedChecks": 20,
+              "degradedChecks": 0,
+              "failedChecks": 0,
+              "signals": 22,
+              "findings": 17,
+              "context": {
+                "contractType": "DPA",
+                "ourSideRole": "SUPPLIER",
+                "paperSource": "COUNTERPARTY_PAPER",
+                "jurisdiction": "UNSPECIFIED"
+              },
+              "humanReview": {
+                "status": "READY_FOR_COMPLETION",
+                "actionableFindings": 15,
+                "resolvedFindings": 15,
+                "remainingFindings": 0,
+                "escalated": 0,
+                "readyToFinalize": true,
+                "blockers": []
+              },
+              "finalization": null,
+              "redline": null
+            },
+            {
+              "id": "2be6337e-604e-45e8-a475-6bdd1f5e3681",
+              "contractId": "5991f81f-ba07-44b9-8a64-55f46f7949cd",
+              "contractVersionNumber": 1,
+              "contractFilename": "Kestrel Assurance - Statement of Work No. 1.docx",
+              "uploadedAt": "2026-10-28T22:41:42.296142Z",
+              "status": "COMPLETED",
+              "failure": null,
+              "createdAt": "2026-10-28T22:41:42.443126Z",
+              "startedAt": "2026-10-28T22:41:45.646030Z",
+              "completedAt": "2026-10-28T22:41:46.044412Z",
+              "activeRunNumber": 1,
+              "activeRunStatus": "COMPLETED",
+              "latestRunStatus": null,
+              "plannedChecks": 16,
+              "completedChecks": 16,
+              "degradedChecks": 0,
+              "failedChecks": 0,
+              "signals": 18,
+              "findings": 8,
+              "context": {
+                "contractType": "SOW",
+                "ourSideRole": "SUPPLIER",
+                "paperSource": "COUNTERPARTY_PAPER",
+                "jurisdiction": "UK"
+              },
+              "humanReview": {
+                "status": "NOT_STARTED",
+                "actionableFindings": 7,
+                "resolvedFindings": 0,
+                "remainingFindings": 7,
+                "escalated": 0,
+                "readyToFinalize": false,
+                "blockers": [
+                  "UNRESOLVED_BLOCKING_FINDINGS",
+                  "UNRESOLVED_REVIEW_REQUIRED_FINDINGS"
+                ]
+              },
+              "finalization": null,
+              "redline": null
+            },
+            {
+              "id": "f5a3f29d-c4d7-4ac6-84da-f4178f8a1131",
+              "contractId": "f644949b-1c89-4130-8f12-ffadd199f4a6",
+              "contractVersionNumber": 1,
+              "contractFilename": "Kestrel Assurance - Order Form KAG-2026-014.docx",
+              "uploadedAt": "2026-10-28T22:41:38.022905Z",
+              "status": "COMPLETED",
+              "failure": null,
+              "createdAt": "2026-10-28T22:41:38.193627Z",
+              "startedAt": "2026-10-28T22:41:40.637303Z",
+              "completedAt": "2026-10-28T22:41:41.026475Z",
+              "activeRunNumber": 1,
+              "activeRunStatus": "COMPLETED",
+              "latestRunStatus": null,
+              "plannedChecks": 17,
+              "completedChecks": 17,
+              "degradedChecks": 0,
+              "failedChecks": 0,
+              "signals": 30,
+              "findings": 13,
+              "context": {
+                "contractType": "ORDER_FORM",
+                "ourSideRole": "SUPPLIER",
+                "paperSource": "COUNTERPARTY_PAPER",
+                "jurisdiction": "UK"
+              },
+              "humanReview": {
+                "status": "COMPLETED",
+                "actionableFindings": 12,
+                "resolvedFindings": 12,
+                "remainingFindings": 0,
+                "escalated": 0,
+                "readyToFinalize": false,
+                "blockers": []
+              },
+              "finalization": {
+                "finalizedAt": "2026-10-28T22:41:55.038454Z",
+                "approvedChanges": 2
+              },
+              "redline": {
+                "status": "COMPLETED",
+                "outcome": "REDLINE_GENERATED",
+                "verifiedChangeCount": 2,
+                "downloadAvailable": true,
+                "completedAt": "2026-10-28T22:41:55.179780Z"
+              }
+            },
+            {
+              "id": "aee06c79-633f-4428-aa8c-94734206114c",
+              "contractId": "6dc17505-941c-4429-915c-a681e17a5a37",
+              "contractVersionNumber": 1,
+              "contractFilename": "Kestrel Assurance - Master Services Agreement (returned markup).docx",
+              "uploadedAt": "2026-10-28T22:41:33.626904Z",
+              "status": "COMPLETED",
+              "failure": null,
+              "createdAt": "2026-10-28T22:41:33.921355Z",
+              "startedAt": "2026-10-28T22:41:35.626837Z",
+              "completedAt": "2026-10-28T22:41:36.356028Z",
+              "activeRunNumber": 1,
+              "activeRunStatus": "COMPLETED",
+              "latestRunStatus": null,
+              "plannedChecks": 35,
+              "completedChecks": 35,
+              "degradedChecks": 0,
+              "failedChecks": 0,
+              "signals": 19,
+              "findings": 12,
+              "context": {
+                "contractType": "MSA",
+                "ourSideRole": "SUPPLIER",
+                "paperSource": "COUNTERPARTY_PAPER",
+                "jurisdiction": "UK"
+              },
+              "humanReview": {
+                "status": "IN_PROGRESS",
+                "actionableFindings": 11,
+                "resolvedFindings": 3,
+                "remainingFindings": 8,
+                "escalated": 0,
+                "readyToFinalize": false,
+                "blockers": [
+                  "UNRESOLVED_BLOCKING_FINDINGS",
+                  "UNRESOLVED_REVIEW_REQUIRED_FINDINGS"
+                ]
+              },
+              "finalization": null,
+              "redline": null
+            }
+          ],
+          "truncated": false,
+          "nextCursor": null
+        },
+        "status": 200,
+        "timestamp": "2026-10-28T22:42:02.808206Z"
+      }
+    },
+    "GET /api/reviews/d2235111-1381-4ee9-9503-9749d3b76a2a/findings/dfdf3afa-2709-4bb9-9608-44b951f6d4c2/decisions": {
+      "status": 200,
+      "body": {
+        "data": {
+          "items": [
+            {
+              "id": "2c007468-1c6a-40ec-bc49-feb684b86e73",
+              "findingId": "dfdf3afa-2709-4bb9-9608-44b951f6d4c2",
+              "revision": 1,
+              "action": "EDIT",
+              "approvedAction": "DELETE",
+              "approvedLanguage": null,
+              "languageSource": null,
+              "approvedDraftingEvidenceId": null,
+              "comment": "A one-way non-solicitation is outside our NDA playbook. Remove it.",
+              "rejectReason": null,
+              "approvedBy": null,
+              "actorId": "00000000-0000-0000-0000-000000000001",
+              "decidedAt": "2026-10-28T22:42:02.785728Z",
+              "clientRequestId": null,
+              "supersedesDecisionId": null
+            }
+          ],
+          "truncated": false,
+          "nextCursor": null
+        },
+        "status": 200,
+        "timestamp": "2026-10-28T22:42:02.824589Z"
+      }
+    },
+    "GET /api/reviews/d2235111-1381-4ee9-9503-9749d3b76a2a/findings/4a4b8f44-214b-4c2c-8300-668ba286bc96/decisions": {
+      "status": 200,
+      "body": {
+        "data": {
+          "items": [
+            {
+              "id": "c05e20b0-5904-4289-92f3-fe03947ff77f",
+              "findingId": "4a4b8f44-214b-4c2c-8300-668ba286bc96",
+              "revision": 1,
+              "action": "REJECT",
+              "approvedAction": null,
+              "approvedLanguage": null,
+              "languageSource": null,
+              "approvedDraftingEvidenceId": null,
+              "comment": "Standard boilerplate. No change.",
+              "rejectReason": "FINDING_WRONG",
+              "approvedBy": null,
+              "actorId": "00000000-0000-0000-0000-000000000001",
+              "decidedAt": "2026-10-28T22:42:02.792467Z",
+              "clientRequestId": null,
+              "supersedesDecisionId": null
+            }
+          ],
+          "truncated": false,
+          "nextCursor": null
+        },
+        "status": 200,
+        "timestamp": "2026-10-28T22:42:02.829158Z"
+      }
+    },
+    "GET /api/reviews/d2235111-1381-4ee9-9503-9749d3b76a2a/findings/3213eedf-bfe2-4b05-b70e-56c518bcbf2f/decisions": {
+      "status": 200,
+      "body": {
+        "data": {
+          "items": [
+            {
+              "id": "ae2f050e-df12-4e4b-91b2-5169b3a2e7d7",
+              "findingId": "3213eedf-bfe2-4b05-b70e-56c518bcbf2f",
+              "revision": 1,
+              "action": "REJECT",
+              "approvedAction": null,
+              "approvedLanguage": null,
+              "languageSource": null,
+              "approvedDraftingEvidenceId": null,
+              "comment": "Five years agreed with Sablepoint for this evaluation.",
+              "rejectReason": "KEEP_AS_DRAFTED",
+              "approvedBy": null,
+              "actorId": "00000000-0000-0000-0000-000000000001",
+              "decidedAt": "2026-10-28T22:42:02.789371Z",
+              "clientRequestId": null,
+              "supersedesDecisionId": null
+            }
+          ],
+          "truncated": false,
+          "nextCursor": null
+        },
+        "status": 200,
+        "timestamp": "2026-10-28T22:42:02.833610Z"
+      }
+    },
+    "GET /api/reviews/d2235111-1381-4ee9-9503-9749d3b76a2a/decisions": {
+      "status": 200,
+      "body": {
+        "data": {
+          "items": [
+            {
+              "id": "ae2f050e-df12-4e4b-91b2-5169b3a2e7d7",
+              "findingId": "3213eedf-bfe2-4b05-b70e-56c518bcbf2f",
+              "revision": 1,
+              "action": "REJECT",
+              "approvedAction": null,
+              "approvedLanguage": null,
+              "languageSource": null,
+              "approvedDraftingEvidenceId": null,
+              "comment": "Five years agreed with Sablepoint for this evaluation.",
+              "rejectReason": "KEEP_AS_DRAFTED",
+              "approvedBy": null,
+              "actorId": "00000000-0000-0000-0000-000000000001",
+              "decidedAt": "2026-10-28T22:42:02.789371Z",
+              "clientRequestId": null,
+              "supersedesDecisionId": null
+            },
+            {
+              "id": "c05e20b0-5904-4289-92f3-fe03947ff77f",
+              "findingId": "4a4b8f44-214b-4c2c-8300-668ba286bc96",
+              "revision": 1,
+              "action": "REJECT",
+              "approvedAction": null,
+              "approvedLanguage": null,
+              "languageSource": null,
+              "approvedDraftingEvidenceId": null,
+              "comment": "Standard boilerplate. No change.",
+              "rejectReason": "FINDING_WRONG",
+              "approvedBy": null,
+              "actorId": "00000000-0000-0000-0000-000000000001",
+              "decidedAt": "2026-10-28T22:42:02.792467Z",
+              "clientRequestId": null,
+              "supersedesDecisionId": null
+            },
+            {
+              "id": "2c007468-1c6a-40ec-bc49-feb684b86e73",
+              "findingId": "dfdf3afa-2709-4bb9-9608-44b951f6d4c2",
+              "revision": 1,
+              "action": "EDIT",
+              "approvedAction": "DELETE",
+              "approvedLanguage": null,
+              "languageSource": null,
+              "approvedDraftingEvidenceId": null,
+              "comment": "A one-way non-solicitation is outside our NDA playbook. Remove it.",
+              "rejectReason": null,
+              "approvedBy": null,
+              "actorId": "00000000-0000-0000-0000-000000000001",
+              "decidedAt": "2026-10-28T22:42:02.785728Z",
+              "clientRequestId": null,
+              "supersedesDecisionId": null
+            }
+          ],
+          "truncated": false,
+          "nextCursor": null
+        },
+        "status": 200,
+        "timestamp": "2026-10-28T22:42:02.837995Z"
+      }
+    },
+    "GET /api/reviews/d2235111-1381-4ee9-9503-9749d3b76a2a/human-review": {
+      "status": 200,
+      "body": {
+        "data": {
+          "reviewId": "d2235111-1381-4ee9-9503-9749d3b76a2a",
+          "status": "READY_FOR_COMPLETION",
+          "analysisStatus": "COMPLETED",
+          "actionableFindings": 3,
+          "resolvedFindings": 3,
+          "remainingFindings": 0,
+          "accepted": 0,
+          "edited": 1,
+          "rejected": 2,
+          "escalated": 0,
+          "informationalFindings": 0,
+          "informationalDecided": 0,
+          "readyToFinalize": true,
+          "blockers": [],
+          "changeSetId": null,
+          "finalizedBy": null,
+          "finalizedAt": null
+        },
+        "status": 200,
+        "timestamp": "2026-10-28T22:42:02.841917Z"
+      }
+    }
+  },
+  "mutations": [
+    {
+      "method": "PUT",
+      "path": "/api/reviews/d2235111-1381-4ee9-9503-9749d3b76a2a/findings/dfdf3afa-2709-4bb9-9608-44b951f6d4c2/decision",
+      "request": {
+        "expectedVersion": 0,
+        "action": "EDIT",
+        "approvedAction": "DELETE",
+        "comment": "A one-way non-solicitation is outside our NDA playbook. Remove it."
+      },
+      "status": 200,
+      "body": {
+        "data": {
+          "id": "2c007468-1c6a-40ec-bc49-feb684b86e73",
+          "findingId": "dfdf3afa-2709-4bb9-9608-44b951f6d4c2",
+          "revision": 1,
+          "action": "EDIT",
+          "approvedAction": "DELETE",
+          "approvedLanguage": null,
+          "languageSource": null,
+          "approvedDraftingEvidenceId": null,
+          "comment": "A one-way non-solicitation is outside our NDA playbook. Remove it.",
+          "rejectReason": null,
+          "approvedBy": null,
+          "actorId": "00000000-0000-0000-0000-000000000001",
+          "decidedAt": "2026-10-28T22:42:02.785728Z",
+          "clientRequestId": null,
+          "supersedesDecisionId": null
+        },
+        "status": 200
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/reviews/d2235111-1381-4ee9-9503-9749d3b76a2a/findings/3213eedf-bfe2-4b05-b70e-56c518bcbf2f/decision",
+      "request": {
+        "expectedVersion": 0,
+        "action": "REJECT",
+        "comment": "Five years agreed with Sablepoint for this evaluation.",
+        "rejectReason": "KEEP_AS_DRAFTED"
+      },
+      "status": 200,
+      "body": {
+        "data": {
+          "id": "ae2f050e-df12-4e4b-91b2-5169b3a2e7d7",
+          "findingId": "3213eedf-bfe2-4b05-b70e-56c518bcbf2f",
+          "revision": 1,
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "languageSource": null,
+          "approvedDraftingEvidenceId": null,
+          "comment": "Five years agreed with Sablepoint for this evaluation.",
+          "rejectReason": "KEEP_AS_DRAFTED",
+          "approvedBy": null,
+          "actorId": "00000000-0000-0000-0000-000000000001",
+          "decidedAt": "2026-10-28T22:42:02.789371Z",
+          "clientRequestId": null,
+          "supersedesDecisionId": null
+        },
+        "status": 200
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/reviews/d2235111-1381-4ee9-9503-9749d3b76a2a/findings/4a4b8f44-214b-4c2c-8300-668ba286bc96/decision",
+      "request": {
+        "expectedVersion": 0,
+        "action": "REJECT",
+        "comment": "Standard boilerplate. No change.",
+        "rejectReason": "FINDING_WRONG"
+      },
+      "status": 200,
+      "body": {
+        "data": {
+          "id": "c05e20b0-5904-4289-92f3-fe03947ff77f",
+          "findingId": "4a4b8f44-214b-4c2c-8300-668ba286bc96",
+          "revision": 1,
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "languageSource": null,
+          "approvedDraftingEvidenceId": null,
+          "comment": "Standard boilerplate. No change.",
+          "rejectReason": "FINDING_WRONG",
+          "approvedBy": null,
+          "actorId": "00000000-0000-0000-0000-000000000001",
+          "decidedAt": "2026-10-28T22:42:02.792467Z",
+          "clientRequestId": null,
+          "supersedesDecisionId": null
+        },
+        "status": 200
+      }
+    }
+  ]
+}

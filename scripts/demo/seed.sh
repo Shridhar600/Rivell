@@ -6,6 +6,14 @@ set -euo pipefail
 # shellcheck source=scripts/demo/_env.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 
+capture=0
+for arg in "$@"; do
+    case "$arg" in
+        --capture) capture=1 ;;
+        *) fail "unknown argument: $arg (expected --capture)" ;;
+    esac
+done
+
 # The replay path needs no provider keys and must not carry a developer's real ones:
 # the tape is stdlib-only and the driver talks to the backend, not to a provider.
 unset TYPESAFE_API_KEY OPENAI_API_KEY RIVELL_EMBEDDINGS_API_KEY
@@ -18,6 +26,11 @@ if [[ -f "$TAPE_FILE" && "$TAPE_FILE" -nt "$REPO/demo/recordings/calls.jsonl.gz"
 fi
 if [[ ! -f "$DECISIONS_FILE" ]]; then
     fail "decisions file not found: $DECISIONS_FILE"
+fi
+
+if [[ "$capture" -eq 1 ]]; then
+    rm -rf "$REPO/demo/capture"
+    mkdir -p "$REPO/demo/capture"
 fi
 
 require_jar
@@ -37,9 +50,16 @@ fi
 start_backend dummy
 wait_backend
 
-if ! run_driver all; then
-    stop_services
-    exit 1
+if [[ "$capture" -eq 1 ]]; then
+    if ! run_driver all --capture-dir demo/capture; then
+        stop_services
+        exit 1
+    fi
+else
+    if ! run_driver all; then
+        stop_services
+        exit 1
+    fi
 fi
 
 trap - EXIT

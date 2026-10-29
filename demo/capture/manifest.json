@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "states": [
+    "base",
+    "tour-k2-compiled",
+    "tour-k2-approved",
+    "tour-k2-published",
+    "tour-c5-decided",
+    "tour-c5-finalized",
+    "tour-c5-done"
+  ],
+  "capturedAt": "2026-10-28T22:41:56Z",
+  "ids": {
+    "reviews": {
+      "Kestrel Assurance - Master Services Agreement (returned markup).docx": "aee06c79-633f-4428-aa8c-94734206114c",
+      "Kestrel Assurance - Order Form KAG-2026-014.docx": "f5a3f29d-c4d7-4ac6-84da-f4178f8a1131",
+      "Kestrel Assurance - Statement of Work No. 1.docx": "2be6337e-604e-45e8-a475-6bdd1f5e3681",
+      "Vantage Health - Data Processing Agreement.docx": "83ba0902-85e1-4753-8e80-bcf2793f26a3",
+      "Sablepoint Analytics - Mutual NDA.docx": "d2235111-1381-4ee9-9503-9749d3b76a2a"
+    },
+    "contracts": {
+      "Kestrel Assurance - Master Services Agreement (returned markup).docx": "6dc17505-941c-4429-915c-a681e17a5a37",
+      "Kestrel Assurance - Order Form KAG-2026-014.docx": "f644949b-1c89-4130-8f12-ffadd199f4a6",
+      "Kestrel Assurance - Statement of Work No. 1.docx": "5991f81f-ba07-44b9-8a64-55f46f7949cd",
+      "Vantage Health - Data Processing Agreement.docx": "7536fcb2-901f-4368-9821-6a461307fbff",
+      "Sablepoint Analytics - Mutual NDA.docx": "c1fde14e-f4ad-40ec-a8ec-24c4af87a45f"
+    },
+    "artifacts": {
+      "Commercial Contracts Playbook v4.2.docx": "6918e95b-df41-4e32-b052-4cf2e7a2ada6",
+      "Clause Library.docx": "0df93039-6299-496e-869b-390f23f8bf96",
+      "Data Protection Playbook.docx": "9a2e415e-40f5-497f-b2b4-856fd7ada518",
+      "NDA Playbook.xlsx": "6876b519-e644-484d-8aae-d6e93f63aa34"
+    },
+    "publications": {
+      "Commercial Contracts Playbook v4.2.docx": "a57540d1-e667-4e2c-a208-c68dc672fb06",
+      "Clause Library.docx": "89edbe94-ca05-42d5-b4b0-77dd4228799e",
+      "Data Protection Playbook.docx": "aa04022f-141e-4522-a472-a3a0e2f92bec",
+      "NDA Playbook.xlsx": "758bbdde-70cd-4461-b9b2-85f4791fde8c"
+    },
+    "publicationNumbers": {
+      "Commercial Contracts Playbook v4.2.docx": 1,
+      "Clause Library.docx": 2,
+      "Data Protection Playbook.docx": 3,
+      "NDA Playbook.xlsx": 4
+    },
+    "k2ArtifactId": "6876b519-e644-484d-8aae-d6e93f63aa34",
+    "k2PublicationId": "758bbdde-70cd-4461-b9b2-85f4791fde8c",
+    "c5ReviewId": "d2235111-1381-4ee9-9503-9749d3b76a2a",
+    "c5ContractId": "c1fde14e-f4ad-40ec-a8ec-24c4af87a45f"
+  },
+  "files": {
+    "f5a3f29d-c4d7-4ac6-84da-f4178f8a1131": {
+      "filename": "ORDER-FORM-NO.-KAG-2026-014-v1-redline.docx",
+      "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "sizeBytes": 45478,
+      "sha256": "82db268be0073be082d756ac725ab2b4dc3439b536b05d505a086d90383a4794"
+    },
+    "d2235111-1381-4ee9-9503-9749d3b76a2a": {
+      "filename": "MUTUAL-NON-DISCLOSURE-AGREEMENT-v1-redline.docx",
+      "contentType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "sizeBytes": 44602,
+      "sha256": "6f95ba22719ab991319aef0658127c2c9b545d32baaab40ac28d7ae156317cca"
+    }
+  },
+  "preparedKnowledge": {
+    "filename": "NDA Playbook.xlsx",
+    "path": "files/NDA Playbook.xlsx",
+    "size": 11566,
+    "sha256": "ce5b978d1e5ecf70820b8933f4c49eb8e22d14d06e328633afa2fce98a09d556"
+  }
+}

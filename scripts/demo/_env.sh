@@ -170,10 +170,11 @@ wait_backend() {
 
 run_driver() {
     local phases="$1"
+    shift
     ( cd "$REPO" && env -u TYPESAFE_API_KEY -u OPENAI_API_KEY -u RIVELL_EMBEDDINGS_API_KEY \
         python3 -I scripts/demo/demo_driver.py --phases "$phases" \
         --dump-dir "$RUN_DIR" --base-url "http://127.0.0.1:$BACKEND_PORT" \
-        --tape-url "$TAPE_URL" )
+        --tape-url "$TAPE_URL" "$@" )
 }
 
 stop_one() {

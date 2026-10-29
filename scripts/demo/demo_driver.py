@@ -20,6 +20,8 @@ HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "eval"))
+import capture  # noqa: E402
+import capture_sink  # noqa: E402
 import demo_config  # noqa: E402
 import redline_check  # noqa: E402
 from rivell_api import ApiError, RivellApi, items  # noqa: E402
@@ -189,8 +191,8 @@ def publish_knowledge(api, corpus, entry: dict, expected_number: int) -> dict:
         raise DemoError(f"knowledge {entry['file']}: publication number is {number}, "
                         f"expected {expected_number}")
     print(f"knowledge {entry['file']} -> artifact {artifact_id} publication {number}")
-    return {"artifactId": artifact_id, "publicationNumber": number,
-            "candidates": len(final)}
+    return {"artifactId": artifact_id, "publicationId": publication.get("id"),
+            "publicationNumber": number, "candidates": len(final)}
 
 
 def _contract_base(contract: dict) -> str:
@@ -630,7 +632,7 @@ def assert_stage(api, review_id, stage) -> dict:
     return view
 
 
-def finalize_and_verify(api, review, corpus_file) -> dict:
+def finalize_and_verify(api, review, corpus_file, after_finalize=None) -> dict:
     corpus_file = pathlib.Path(corpus_file)
     review_id = review["id"]
     change_set = api.post(f"/api/reviews/{review_id}/finalize")
@@ -638,6 +640,8 @@ def finalize_and_verify(api, review, corpus_file) -> dict:
     if not approved:
         raise DemoError(f"review {review_id}: the decisions produced no change; the stage needs "
                         "at least one ACCEPT or EDIT with executable language")
+    if after_finalize is not None:
+        after_finalize()
     contract_id = review["contractId"]
     version = review["contractVersionNumber"]
     structure = api.get(f"/api/contracts/{contract_id}/versions/{version}/structure")
@@ -760,6 +764,7 @@ def run_phase_a(config, corpus, api, tape_url, out_dir, state, review_timeout=18
         published = publish_knowledge(api, corpus, entry, expected_number)
         state["knowledge"][entry["file"]] = {
             "artifactId": published["artifactId"],
+            "publicationId": published["publicationId"],
             "publicationNumber": published["publicationNumber"],
         }
     expected_pin = max((known["publicationNumber"] for known in state["knowledge"].values()),
@@ -788,11 +793,13 @@ def run_phase_a(config, corpus, api, tape_url, out_dir, state, review_timeout=18
     return state
 
 
-def _checkpoint(state, out_dir, name: str) -> None:
+def _checkpoint(state, out_dir, name: str, sink=None) -> None:
     if name not in state["checkpoints"]:
         state["checkpoints"].append(name)
     save_state(pathlib.Path(out_dir) / "state.json", state)
     print(f"CHECKPOINT {name}")
+    if sink is not None:
+        sink.capture(state, name)
 
 
 def _review_findings(api, review_id: str) -> list[dict]:
@@ -908,13 +915,14 @@ def _publish_k2(api, artifact_id: str, state: dict, entry: dict) -> int:
     if artifact_id in {item.get("artifactId") for item in msa}:
         raise DemoError("K2 applies to MSA after publication; the tour would leak NDA knowledge")
     state["knowledge"][entry["file"]] = {"artifactId": artifact_id,
+                                         "publicationId": publication.get("id"),
                                          "publicationNumber": number}
     print(f"knowledge {entry['file']} -> artifact {artifact_id} publication {number}")
     return number
 
 
 def run_phase_b(config, corpus, api, tape_url, decisions_path, out_dir, state,
-                review_timeout=1800, requested=("b",)) -> dict:
+                review_timeout=1800, requested=("b",), sink=None) -> dict:
     decisions = load_decisions(decisions_path)
     validate_decisions(config, decisions)
     base_entries = demo_config.contracts_for_phase(config, "base")
@@ -957,12 +965,13 @@ def run_phase_b(config, corpus, api, tape_url, decisions_path, out_dir, state,
             "versionNumber": review["contractVersionNumber"],
         }
     require_no_misses(tape_health(tape_url))
-    _checkpoint(state, out_dir, "base")
+    _checkpoint(state, out_dir, "base", sink)
 
     k2_entry, k2_id, _ = _find_or_upload_k2(api, corpus, config)
-    _checkpoint(state, out_dir, "tour-k2-compiled")
+    state["knowledge"].setdefault(k2_entry["file"], {})["artifactId"] = k2_id
+    _checkpoint(state, out_dir, "tour-k2-compiled", sink)
     approve_k2(api, k2_id)
-    _checkpoint(state, out_dir, "tour-k2-approved")
+    _checkpoint(state, out_dir, "tour-k2-approved", sink)
     _publish_k2(api, k2_id, state, k2_entry)
 
     tour_entries = demo_config.contracts_for_phase(config, "tour")
@@ -981,14 +990,14 @@ def run_phase_b(config, corpus, api, tape_url, decisions_path, out_dir, state,
     }
     dump_findings(api, [(tour_entry["file"], review)], out_dir, "c5")
     require_no_misses(tape_health(tape_url))
-    _checkpoint(state, out_dir, "tour-k2-published")
+    _checkpoint(state, out_dir, "tour-k2-published", sink)
     if "c" not in requested:
         print(f"next: add the C5 decisions to {decisions_path}, then run --phases c")
     return state
 
 
 def run_phase_c(config, corpus, api, tape_url, decisions_path, out_dir, state,
-                review_timeout=1800, requested=("c",)) -> dict:
+                review_timeout=1800, requested=("c",), sink=None) -> dict:
     tour_entries = demo_config.contracts_for_phase(config, "tour")
     if len(tour_entries) != 1:
         raise DemoError(f"expected exactly one tour contract, found {len(tour_entries)}")
@@ -1011,10 +1020,13 @@ def run_phase_c(config, corpus, api, tape_url, decisions_path, out_dir, state,
     assert_decisions_cover_stage("decided", findings, contract_decisions, sections)
     apply_decisions(api, review["id"], findings, sections, contract_decisions, entry["file"])
     assert_stage(api, review["id"], "decided")
-    finalize_and_verify(api, review, pathlib.Path(corpus) / entry["file"])
+    _checkpoint(state, out_dir, "tour-c5-decided", sink)
+    finalize_and_verify(
+        api, review, pathlib.Path(corpus) / entry["file"],
+        after_finalize=lambda: _checkpoint(state, out_dir, "tour-c5-finalized", sink))
     assert_stage(api, review["id"], "finalized")
     require_no_misses(tape_health(tape_url))
-    _checkpoint(state, out_dir, "tour-c5-done")
+    _checkpoint(state, out_dir, "tour-c5-done", sink)
     return state
 
 
@@ -1046,6 +1058,8 @@ def main(argv=None) -> int:
     parser.add_argument("--tape-url", default="http://127.0.0.1:18090")
     parser.add_argument("--phases", default="a")
     parser.add_argument("--dump-dir", default="backend/target/demo")
+    parser.add_argument("--capture-dir",
+                        help="write static API captures here at every checkpoint")
     parser.add_argument("--review-timeout", type=int, default=1800)
     parser.add_argument("--check-config", action="store_true")
     parser.add_argument("--check-decisions", action="store_true")
@@ -1098,17 +1112,23 @@ def main(argv=None) -> int:
     else:
         state = load_state(state_path)
     api = api_client(args.base_url)
+    recorder = capture_sink.MutationRecorder(api) if args.capture_dir else api
+    sink = None
+    if args.capture_dir:
+        sink = capture_sink.CaptureSink(
+            _path(args.capture_dir), args.base_url, recorder,
+            corpus / "knowledge" / "NDA Playbook.xlsx")
     try:
         if "a" in requested:
-            run_phase_a(config, corpus, api, args.tape_url, dump_dir, state,
+            run_phase_a(config, corpus, recorder, args.tape_url, dump_dir, state,
                         args.review_timeout)
         if "b" in requested:
-            run_phase_b(config, corpus, api, args.tape_url, decisions_path, dump_dir, state,
-                        args.review_timeout, requested)
+            run_phase_b(config, corpus, recorder, args.tape_url, decisions_path, dump_dir, state,
+                        args.review_timeout, requested, sink)
         if "c" in requested:
-            run_phase_c(config, corpus, api, args.tape_url, decisions_path, dump_dir, state,
-                        args.review_timeout, requested)
-    except (DemoError, ApiError, demo_config.ConfigError) as error:
+            run_phase_c(config, corpus, recorder, args.tape_url, decisions_path, dump_dir, state,
+                        args.review_timeout, requested, sink)
+    except (DemoError, ApiError, demo_config.ConfigError, capture.CaptureError) as error:
         print(f"demo failed: {error}", file=sys.stderr)
         return 1
     return 0

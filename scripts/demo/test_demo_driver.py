@@ -1,9 +1,21 @@
+import json
 import pathlib
+import shutil
 import unittest
 import uuid
 
 import demo_config
 import demo_driver
+
+SCRATCH = (pathlib.Path(__file__).resolve().parents[2]
+           / ".superpowers" / "sdd" / "demo-part2" / "tmp")
+
+
+def scratch_dir() -> pathlib.Path:
+    SCRATCH.mkdir(parents=True, exist_ok=True)
+    directory = SCRATCH / f"test-driver-{uuid.uuid4().hex}"
+    directory.mkdir()
+    return directory
 
 
 class StubApi:
@@ -182,6 +194,36 @@ class ApplyDecisionTest(unittest.TestCase):
         self.assertEqual(api.puts, [
             (f"/api/reviews/review-1/findings/{f['id']}/decision",
              {"expectedVersion": 0, "action": "ACCEPT"})])
+
+
+class CheckpointCaptureTest(unittest.TestCase):
+
+    def test_a_checkpoint_saves_the_state_then_asks_the_sink_to_capture(self):
+        directory = scratch_dir()
+        try:
+            state = demo_driver.empty_state()
+            captured = []
+
+            class Sink:
+                def capture(self, current, name):
+                    saved = json.loads((directory / "state.json").read_text())
+                    captured.append((name, current, saved["checkpoints"]))
+
+            demo_driver._checkpoint(state, directory, "tour-c5-decided", Sink())
+            self.assertEqual(captured[0][0], "tour-c5-decided")
+            self.assertEqual(captured[0][2], ["tour-c5-decided"])
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_a_checkpoint_without_a_sink_still_writes_the_state(self):
+        directory = scratch_dir()
+        try:
+            state = demo_driver.empty_state()
+            demo_driver._checkpoint(state, directory, "base")
+            saved = json.loads((directory / "state.json").read_text())
+            self.assertEqual(saved["checkpoints"], ["base"])
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
 
 
 if __name__ == "__main__":
