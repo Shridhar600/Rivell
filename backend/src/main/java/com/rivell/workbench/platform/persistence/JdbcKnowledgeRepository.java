@@ -682,7 +682,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         return jdbcClient.sql("""
                         select * from knowledge_candidate
                         where organization_id = :organizationId and review_status = 'PUBLISHED'
-                        order by created_at, id
+                        order by created_at, raw_label, coalesce(content_text, ''),
+                          coalesce(effective_concept_key, ''), id
                         """)
                 .param("organizationId", organizationId)
                 .query(this::mapCandidate)
@@ -719,12 +720,24 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         addPinVisibility(conditions, params, query.asOfPublicationNumber());
         if (query.afterCreatedAt() != null) {
             // Keyset resume on the same total order as the ORDER BY, bound at full TIMESTAMPTZ
-            // precision: a truncated position would skip rows sharing that millisecond.
-            conditions.add("(c.created_at, c.id) < (cast(:afterCreatedAt as timestamptz),"
-                    + " cast(:afterId as uuid))");
+            // precision: a truncated position would skip rows sharing that millisecond. The
+            // cursor's content values travel with the query so a page boundary inside a
+            // timestamp keeps the content order rather than falling back to a random id.
+            conditions.add("(c.created_at < cast(:afterCreatedAt as timestamptz)"
+                    + " or (c.created_at = cast(:afterCreatedAt as timestamptz)"
+                    + " and (c.raw_label > :afterRawLabel"
+                    + " or (c.raw_label = :afterRawLabel"
+                    + " and (coalesce(c.content_text, '') > :afterContentText"
+                    + " or (coalesce(c.content_text, '') = :afterContentText"
+                    + " and (coalesce(c.effective_concept_key, '') > :afterConceptKey"
+                    + " or (coalesce(c.effective_concept_key, '') = :afterConceptKey"
+                    + " and c.id > cast(:afterId as uuid)))))))))");
             params.put("afterCreatedAt",
                     OffsetDateTime.ofInstant(query.afterCreatedAt(), ZoneOffset.UTC));
             params.put("afterId", query.afterId().toString());
+            params.put("afterRawLabel", query.afterRawLabel());
+            params.put("afterContentText", query.afterContentText());
+            params.put("afterConceptKey", query.afterConceptKey());
         }
         // a candidate has at most one ADD publication (DB-enforced), so this join
         // cannot fan out; it both constrains pin visibility and exposes the
@@ -742,7 +755,8 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
         if (topicMembership) {
             // primary-topic match first (only when the clause has one: PostgreSQL rejects a
             // constant ORDER BY term), then shared-topic count, then publication order;
-            // source (unit) order breaks publication ties deterministically
+            // source (unit) order breaks publication ties, and ties in all of those are broken
+            // by content so the same knowledge always gives the same order.
             var primaryMatch = "";
             if (query.primaryTopicKey() != null) {
                 primaryMatch = " (c.effective_concept_key = :primaryTopicKey) desc,";
@@ -752,9 +766,15 @@ class JdbcKnowledgeRepository implements KnowledgeRepository {
             order = " order by" + primaryMatch
                     + " cardinality(array(select unnest(c.topic_keys)"
                     + " intersect select unnest(:topicKeys::text[]))) desc,"
-                    + " pp.publication_number desc, u.ordinal asc, c.id desc limit :limit";
+                    + " pp.publication_number desc, u.ordinal asc,"
+                    + " c.raw_label asc, coalesce(c.content_text, '') asc,"
+                    + " coalesce(c.effective_concept_key, '') asc, c.id asc limit :limit";
         } else {
-            order = " order by c.created_at desc, c.id desc limit :limit";
+            // recency stays the primary order; ties are broken by content so the same
+            // knowledge always gives the same order.
+            order = " order by c.created_at desc, c.raw_label asc,"
+                    + " coalesce(c.content_text, '') asc,"
+                    + " coalesce(c.effective_concept_key, '') asc, c.id asc limit :limit";
         }
         var sql = "select c.*, pp.id as publication_id, pp.publication_number as publication_number"
                 + from + " where "

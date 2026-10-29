@@ -3,8 +3,12 @@ package com.rivell.workbench.intelligence.provider;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 
 import org.junit.jupiter.api.Test;
 
@@ -38,6 +42,10 @@ class OpenAiCompatibleGenerativeProviderTest {
     }
 
     private static SemanticState state(String text) {
+        return stateWithPayload(Map.of("text", text));
+    }
+
+    private static SemanticState stateWithPayload(Object payload) {
         return new SemanticState() {
 
             @Override
@@ -47,9 +55,14 @@ class OpenAiCompatibleGenerativeProviderTest {
 
             @Override
             public Object payload() {
-                return java.util.Map.of("text", text);
+                return payload;
             }
         };
+    }
+
+    private static ReasoningSpec twoFieldSpec(Map<String, String> fields) {
+        return new ReasoningSpec("two-fields", 1, "Extract two fields.", 1,
+                fields, Map.of("b", Set.of("Z", "A")));
     }
 
     private static String chatResponse(String content, String finishReason, String refusal) {
@@ -182,6 +195,56 @@ class OpenAiCompatibleGenerativeProviderTest {
                 .doesNotContain("responseFormat").doesNotContain("jsonSchema")
                 .doesNotContain("Bearer");
         assertThat(requests.get(0)).contains("must be exactly one of");
+    }
+
+    @Test
+    void requestBodyIsByteIdenticalForDifferentUnorderedFieldMaps() {
+        var requests = new java.util.ArrayList<String>();
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> {
+                    requests.add(request);
+                    return chatResponse("{\"aX\":\"x\",\"b\":\"y\"}", "stop", null);
+                }),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt",
+                        null, null));
+        var hashFields = new HashMap<String, String>();
+        hashFields.put("aX", "aX description");
+        hashFields.put("b", "b description");
+
+        provider.generate(new GenerationRequest("cap-model", state("t"),
+                twoFieldSpec(Map.of("b", "b description", "aX", "aX description"))));
+        provider.generate(new GenerationRequest("cap-model", state("t"),
+                twoFieldSpec(hashFields)));
+        provider.generate(new GenerationRequest("cap-model", state("t"),
+                twoFieldSpec(new TreeMap<>(hashFields))));
+
+        assertThat(requests.get(1)).isEqualTo(requests.get(0));
+        assertThat(requests.get(2)).isEqualTo(requests.get(0));
+    }
+
+    @Test
+    void requestBodySortsEquivalentStateMapKeys() {
+        var requests = new java.util.ArrayList<String>();
+        var provider = new OpenAiCompatibleGenerativeProvider(
+                scripted(request -> {
+                    requests.add(request);
+                    return chatResponse(
+                            "{\"liabilityCapMultiple\":\"3\",\"capBasis\":\"ANNUAL_FEES\"}",
+                            "stop", null);
+                }),
+                MAPPER, new GenerativeProperties(
+                        "openai-compatible", "https://gateway.test/v1", "key", "gpt",
+                        null, null));
+        var unordered = Map.of("delta", "1", "alpha", "2", "charlie", "3");
+        var sorted = new TreeMap<String, String>(unordered);
+
+        provider.generate(new GenerationRequest("cap-model",
+                stateWithPayload(unordered), capSpec()));
+        provider.generate(new GenerationRequest("cap-model",
+                stateWithPayload(sorted), capSpec()));
+
+        assertThat(requests.get(1)).isEqualTo(requests.get(0));
     }
 
     @Test

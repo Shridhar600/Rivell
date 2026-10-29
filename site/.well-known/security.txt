@@ -1,0 +1,5 @@
+Contact: https://github.com/Shridhar600/Rivell/security/advisories/new
+Expires: 2027-09-30T00:00:00.000Z
+Canonical: https://rivell.shridharvijay.com/.well-known/security.txt
+Preferred-Languages: en
+Policy: https://github.com/Shridhar600/Rivell/security/policy

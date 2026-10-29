@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -24,6 +25,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import com.rivell.workbench.evaluation.ScriptedModelConfiguration;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
@@ -41,10 +43,11 @@ import com.rivell.workbench.organization.UserIdentity;
  * that the first compare-and-set performs the competing edit on its own connection and waits for
  * it to commit, which is exactly what a second user's edit does at that moment.
  */
-// The scripted provider is what makes semantic compilation succeed without an API key, and only a
-// confidently classified candidate is ROUTINE, which is what bulk approval requires. Each test uses
-// its own organization, so the demo seed this property also triggers cannot affect the assertions.
-@SpringBootTest(properties = "rivell.demo.seed-enabled=true")
+// The scripted test provider is what makes semantic compilation succeed without an API key, and only
+// a confidently classified candidate is ROUTINE, which is what bulk approval requires. Each test uses
+// its own organization, so tests cannot affect each other's assertions.
+@SpringBootTest
+@Import(ScriptedModelConfiguration.class)
 @Testcontainers
 class KnowledgeReviewConcurrencyIT {
 
@@ -312,13 +315,13 @@ class KnowledgeReviewConcurrencyIT {
 
     private KnowledgeArtifact ingestRoutinePlaybook() throws Exception {
         try (var stream = getClass().getClassLoader()
-                .getResourceAsStream("demo/documents/Rivell Demo Routine Playbook.docx")) {
-            assertThat(stream).as("demo routine playbook").isNotNull();
+                .getResourceAsStream("fixtures/knowledge-routine-playbook.docx")) {
+            assertThat(stream).as("routine playbook fixture").isNotNull();
             return ingestionService.ingest("routine.docx",
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     ArtifactType.PLAYBOOK,
                     new ArtifactManifest(Set.of(), null, null, null, null, null, null, null,
-                            "Rivell local demo scenario data"),
+                            "Rivell test fixture"),
                     stream);
         }
     }

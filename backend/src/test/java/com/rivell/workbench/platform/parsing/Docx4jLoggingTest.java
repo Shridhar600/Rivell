@@ -41,17 +41,19 @@ class Docx4jLoggingTest {
     }
 
     @Test
-    void parsingTheDemoDocumentsLogsNoDocx4jError() throws Exception {
-        // The demo contracts carry word/styles.xml but no relationship that points at it.
+    void parsingContractFixturesLogsNoDocx4jError() throws Exception {
+        // The m5 contract fixtures carry word/styles.xml but no relationship that points at it.
         var parser = new DocxStructuralParser(new DocxParserProperties(200L * 1024 * 1024));
-        var demoDocuments = Path.of("src/main/resources/demo/documents");
-        try (var files = Files.list(demoDocuments)) {
-            for (var file : files.filter(f -> f.toString().endsWith(".docx")).toList()) {
+        var fixtures = Path.of("src/test/resources/fixtures");
+        try (var files = Files.list(fixtures)) {
+            for (var file : files
+                    .filter(f -> f.getFileName().toString().matches("m5-.*\\.docx"))
+                    .toList()) {
                 parser.parse(new ByteArrayInputStream(Files.readAllBytes(file)), UUID.randomUUID());
             }
         }
-        var acme = Files.readAllBytes(demoDocuments.resolve("Acme MSA - Review in progress.docx"));
-        assertThat(parser.parse(new ByteArrayInputStream(acme), UUID.randomUUID()).status())
+        var msa = Files.readAllBytes(fixtures.resolve("m5-msa-services.docx"));
+        assertThat(parser.parse(new ByteArrayInputStream(msa), UUID.randomUUID()).status())
                 .isEqualTo(ParseStatus.OK);
 
         assertThat(appender.list)

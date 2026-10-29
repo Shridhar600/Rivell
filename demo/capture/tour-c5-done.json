@@ -1,0 +1,329 @@
+{
+  "state": "tour-c5-done",
+  "capturedAt": "2026-10-28T22:42:04Z",
+  "responses": {
+    "GET /api/reviews": {
+      "status": 200,
+      "body": {
+        "data": {
+          "items": [
+            {
+              "id": "d2235111-1381-4ee9-9503-9749d3b76a2a",
+              "contractId": "c1fde14e-f4ad-40ec-a8ec-24c4af87a45f",
+              "contractVersionNumber": 1,
+              "contractFilename": "Sablepoint Analytics - Mutual NDA.docx",
+              "uploadedAt": "2026-10-28T22:41:58.013837Z",
+              "status": "COMPLETED",
+              "failure": null,
+              "createdAt": "2026-10-28T22:41:58.102164Z",
+              "startedAt": "2026-10-28T22:42:00.665410Z",
+              "completedAt": "2026-10-28T22:42:00.982524Z",
+              "activeRunNumber": 1,
+              "activeRunStatus": "COMPLETED",
+              "latestRunStatus": null,
+              "plannedChecks": 23,
+              "completedChecks": 23,
+              "degradedChecks": 0,
+              "failedChecks": 0,
+              "signals": 3,
+              "findings": 3,
+              "context": {
+                "contractType": "MNDA",
+                "ourSideRole": "PARTY_A",
+                "paperSource": "COUNTERPARTY_PAPER",
+                "jurisdiction": "US"
+              },
+              "humanReview": {
+                "status": "COMPLETED",
+                "actionableFindings": 3,
+                "resolvedFindings": 3,
+                "remainingFindings": 0,
+                "escalated": 0,
+                "readyToFinalize": false,
+                "blockers": []
+              },
+              "finalization": {
+                "finalizedAt": "2026-10-28T22:42:03.350694Z",
+                "approvedChanges": 1
+              },
+              "redline": {
+                "status": "COMPLETED",
+                "outcome": "REDLINE_GENERATED",
+                "verifiedChangeCount": 1,
+                "downloadAvailable": true,
+                "completedAt": "2026-10-28T22:42:03.933675Z"
+              }
+            },
+            {
+              "id": "83ba0902-85e1-4753-8e80-bcf2793f26a3",
+              "contractId": "7536fcb2-901f-4368-9821-6a461307fbff",
+              "contractVersionNumber": 1,
+              "contractFilename": "Vantage Health - Data Processing Agreement.docx",
+              "uploadedAt": "2026-10-28T22:41:46.517701Z",
+              "status": "COMPLETED",
+              "failure": null,
+              "createdAt": "2026-10-28T22:41:46.685229Z",
+              "startedAt": "2026-10-28T22:41:50.656674Z",
+              "completedAt": "2026-10-28T22:41:51.028792Z",
+              "activeRunNumber": 1,
+              "activeRunStatus": "COMPLETED",
+              "latestRunStatus": null,
+              "plannedChecks": 20,
+              "completedChecks": 20,
+              "degradedChecks": 0,
+              "failedChecks": 0,
+              "signals": 22,
+              "findings": 17,
+              "context": {
+                "contractType": "DPA",
+                "ourSideRole": "SUPPLIER",
+                "paperSource": "COUNTERPARTY_PAPER",
+                "jurisdiction": "UNSPECIFIED"
+              },
+              "humanReview": {
+                "status": "READY_FOR_COMPLETION",
+                "actionableFindings": 15,
+                "resolvedFindings": 15,
+                "remainingFindings": 0,
+                "escalated": 0,
+                "readyToFinalize": true,
+                "blockers": []
+              },
+              "finalization": null,
+              "redline": null
+            },
+            {
+              "id": "2be6337e-604e-45e8-a475-6bdd1f5e3681",
+              "contractId": "5991f81f-ba07-44b9-8a64-55f46f7949cd",
+              "contractVersionNumber": 1,
+              "contractFilename": "Kestrel Assurance - Statement of Work No. 1.docx",
+              "uploadedAt": "2026-10-28T22:41:42.296142Z",
+              "status": "COMPLETED",
+              "failure": null,
+              "createdAt": "2026-10-28T22:41:42.443126Z",
+              "startedAt": "2026-10-28T22:41:45.646030Z",
+              "completedAt": "2026-10-28T22:41:46.044412Z",
+              "activeRunNumber": 1,
+              "activeRunStatus": "COMPLETED",
+              "latestRunStatus": null,
+              "plannedChecks": 16,
+              "completedChecks": 16,
+              "degradedChecks": 0,
+              "failedChecks": 0,
+              "signals": 18,
+              "findings": 8,
+              "context": {
+                "contractType": "SOW",
+                "ourSideRole": "SUPPLIER",
+                "paperSource": "COUNTERPARTY_PAPER",
+                "jurisdiction": "UK"
+              },
+              "humanReview": {
+                "status": "NOT_STARTED",
+                "actionableFindings": 7,
+                "resolvedFindings": 0,
+                "remainingFindings": 7,
+                "escalated": 0,
+                "readyToFinalize": false,
+                "blockers": [
+                  "UNRESOLVED_BLOCKING_FINDINGS",
+                  "UNRESOLVED_REVIEW_REQUIRED_FINDINGS"
+                ]
+              },
+              "finalization": null,
+              "redline": null
+            },
+            {
+              "id": "f5a3f29d-c4d7-4ac6-84da-f4178f8a1131",
+              "contractId": "f644949b-1c89-4130-8f12-ffadd199f4a6",
+              "contractVersionNumber": 1,
+              "contractFilename": "Kestrel Assurance - Order Form KAG-2026-014.docx",
+              "uploadedAt": "2026-10-28T22:41:38.022905Z",
+              "status": "COMPLETED",
+              "failure": null,
+              "createdAt": "2026-10-28T22:41:38.193627Z",
+              "startedAt": "2026-10-28T22:41:40.637303Z",
+              "completedAt": "2026-10-28T22:41:41.026475Z",
+              "activeRunNumber": 1,
+              "activeRunStatus": "COMPLETED",
+              "latestRunStatus": null,
+              "plannedChecks": 17,
+              "completedChecks": 17,
+              "degradedChecks": 0,
+              "failedChecks": 0,
+              "signals": 30,
+              "findings": 13,
+              "context": {
+                "contractType": "ORDER_FORM",
+                "ourSideRole": "SUPPLIER",
+                "paperSource": "COUNTERPARTY_PAPER",
+                "jurisdiction": "UK"
+              },
+              "humanReview": {
+                "status": "COMPLETED",
+                "actionableFindings": 12,
+                "resolvedFindings": 12,
+                "remainingFindings": 0,
+                "escalated": 0,
+                "readyToFinalize": false,
+                "blockers": []
+              },
+              "finalization": {
+                "finalizedAt": "2026-10-28T22:41:55.038454Z",
+                "approvedChanges": 2
+              },
+              "redline": {
+                "status": "COMPLETED",
+                "outcome": "REDLINE_GENERATED",
+                "verifiedChangeCount": 2,
+                "downloadAvailable": true,
+                "completedAt": "2026-10-28T22:41:55.179780Z"
+              }
+            },
+            {
+              "id": "aee06c79-633f-4428-aa8c-94734206114c",
+              "contractId": "6dc17505-941c-4429-915c-a681e17a5a37",
+              "contractVersionNumber": 1,
+              "contractFilename": "Kestrel Assurance - Master Services Agreement (returned markup).docx",
+              "uploadedAt": "2026-10-28T22:41:33.626904Z",
+              "status": "COMPLETED",
+              "failure": null,
+              "createdAt": "2026-10-28T22:41:33.921355Z",
+              "startedAt": "2026-10-28T22:41:35.626837Z",
+              "completedAt": "2026-10-28T22:41:36.356028Z",
+              "activeRunNumber": 1,
+              "activeRunStatus": "COMPLETED",
+              "latestRunStatus": null,
+              "plannedChecks": 35,
+              "completedChecks": 35,
+              "degradedChecks": 0,
+              "failedChecks": 0,
+              "signals": 19,
+              "findings": 12,
+              "context": {
+                "contractType": "MSA",
+                "ourSideRole": "SUPPLIER",
+                "paperSource": "COUNTERPARTY_PAPER",
+                "jurisdiction": "UK"
+              },
+              "humanReview": {
+                "status": "IN_PROGRESS",
+                "actionableFindings": 11,
+                "resolvedFindings": 3,
+                "remainingFindings": 8,
+                "escalated": 0,
+                "readyToFinalize": false,
+                "blockers": [
+                  "UNRESOLVED_BLOCKING_FINDINGS",
+                  "UNRESOLVED_REVIEW_REQUIRED_FINDINGS"
+                ]
+              },
+              "finalization": null,
+              "redline": null
+            }
+          ],
+          "truncated": false,
+          "nextCursor": null
+        },
+        "status": 200,
+        "timestamp": "2026-10-28T22:42:03.960460Z"
+      }
+    },
+    "GET /api/reviews/d2235111-1381-4ee9-9503-9749d3b76a2a/redline": {
+      "status": 200,
+      "body": {
+        "data": {
+          "id": "5fe554bb-ee4c-42cf-891c-687b7238218d",
+          "reviewId": "d2235111-1381-4ee9-9503-9749d3b76a2a",
+          "changeSetId": "d020d9a1-0d3d-474f-a7ba-6b6acb59ef5d",
+          "contractId": "c1fde14e-f4ad-40ec-a8ec-24c4af87a45f",
+          "contractVersionNumber": 1,
+          "changeSetVersion": 1,
+          "attempt": 1,
+          "status": "COMPLETED",
+          "outcome": "REDLINE_GENERATED",
+          "failureCode": null,
+          "failureDetail": null,
+          "rendererVersion": "rivell-redline-renderer-1",
+          "placementStrategyVersion": "rivell-insert-placement-1",
+          "sourceSha256": "0ca24c225fd29e11395c13559e3d1cbd34785f761b8d2cefddb60b9c76ac3fdb",
+          "changeCount": 1,
+          "requestedBy": "00000000-0000-0000-0000-000000000001",
+          "startedAt": "2026-10-28T22:42:03.862581Z",
+          "completedAt": "2026-10-28T22:42:03.933675Z",
+          "artifactFilename": "MUTUAL-NON-DISCLOSURE-AGREEMENT-v1-redline.docx",
+          "artifactSizeBytes": 44602,
+          "artifactSha256": "6f95ba22719ab991319aef0658127c2c9b545d32baaab40ac28d7ae156317cca",
+          "downloadAvailable": true,
+          "changes": [
+            {
+              "approvedChangeId": "c3e46fc5-6bd5-48b3-bd33-5908c34b12f2",
+              "ordinal": 0,
+              "actionType": "DELETE",
+              "targetKind": "CLAUSE",
+              "status": "APPLIED",
+              "verification": "VERIFIED",
+              "failureCode": null,
+              "placement": null,
+              "resolvedTarget": "10. Non-Solicitation. During the Term and for twelve (12) months thereafter, Bramber shall not, directly or indirectly, ",
+              "paragraphsDeleted": 2,
+              "paragraphsInserted": 0
+            }
+          ]
+        },
+        "status": 200,
+        "timestamp": "2026-10-28T22:42:03.995675Z"
+      }
+    }
+  },
+  "mutations": [
+    {
+      "method": "POST",
+      "path": "/api/reviews/d2235111-1381-4ee9-9503-9749d3b76a2a/redline",
+      "request": null,
+      "status": 200,
+      "body": {
+        "data": {
+          "id": "5fe554bb-ee4c-42cf-891c-687b7238218d",
+          "reviewId": "d2235111-1381-4ee9-9503-9749d3b76a2a",
+          "changeSetId": "d020d9a1-0d3d-474f-a7ba-6b6acb59ef5d",
+          "contractId": "c1fde14e-f4ad-40ec-a8ec-24c4af87a45f",
+          "contractVersionNumber": 1,
+          "changeSetVersion": 1,
+          "attempt": 1,
+          "status": "COMPLETED",
+          "outcome": "REDLINE_GENERATED",
+          "failureCode": null,
+          "failureDetail": null,
+          "rendererVersion": "rivell-redline-renderer-1",
+          "placementStrategyVersion": "rivell-insert-placement-1",
+          "sourceSha256": "0ca24c225fd29e11395c13559e3d1cbd34785f761b8d2cefddb60b9c76ac3fdb",
+          "changeCount": 1,
+          "requestedBy": "00000000-0000-0000-0000-000000000001",
+          "startedAt": "2026-10-28T22:42:03.862581Z",
+          "completedAt": "2026-10-28T22:42:03.933675Z",
+          "artifactFilename": "MUTUAL-NON-DISCLOSURE-AGREEMENT-v1-redline.docx",
+          "artifactSizeBytes": 44602,
+          "artifactSha256": "6f95ba22719ab991319aef0658127c2c9b545d32baaab40ac28d7ae156317cca",
+          "downloadAvailable": true,
+          "changes": [
+            {
+              "approvedChangeId": "c3e46fc5-6bd5-48b3-bd33-5908c34b12f2",
+              "ordinal": 0,
+              "actionType": "DELETE",
+              "targetKind": "CLAUSE",
+              "status": "APPLIED",
+              "verification": "VERIFIED",
+              "failureCode": null,
+              "placement": null,
+              "resolvedTarget": "10. Non-Solicitation. During the Term and for twelve (12) months thereafter, Bramber shall not, directly or indirectly, ",
+              "paragraphsDeleted": 2,
+              "paragraphsInserted": 0
+            }
+          ]
+        },
+        "status": 200
+      }
+    }
+  ]
+}

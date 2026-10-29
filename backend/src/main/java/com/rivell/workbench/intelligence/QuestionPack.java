@@ -12,6 +12,6 @@ public record QuestionPack(Map<String, SemanticQuestion> questions) {
         if (questions == null || questions.isEmpty()) {
             throw new IllegalArgumentException("A question pack requires at least one question");
         }
-        questions = Map.copyOf(questions);
+        questions = StableOrder.map(questions);
     }
 }

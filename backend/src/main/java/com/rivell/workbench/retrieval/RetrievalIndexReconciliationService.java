@@ -79,10 +79,7 @@ public class RetrievalIndexReconciliationService {
                         null, null, null, null, null, null, null).withLimit(pageSize);
                 com.rivell.workbench.knowledge.PublishedCandidate cursor = null;
                 while (true) {
-                    var query = cursor == null
-                            ? firstPage
-                            : firstPage.after(cursor.candidate().createdAt(),
-                                    cursor.candidate().id());
+                    var query = cursor == null ? firstPage : firstPage.after(cursor);
                     var candidates = knowledgeQueries.listPublishedCandidatesForOrganization(query);
                     var missing = new ArrayList<com.rivell.workbench.knowledge.PublishedCandidate>();
                     var withoutVectors =

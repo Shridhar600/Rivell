@@ -1,6 +1,7 @@
 package com.rivell.workbench.intelligence.provider;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 
 import java.net.http.HttpClient;
 import java.net.http.HttpConnectTimeoutException;
@@ -193,8 +194,12 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
 
     private String userInstruction(GenerationRequest request) {
         try {
+            // The state is embedded as text, not as a JSON object, so map keys are sorted
+            // here; otherwise the same request would be worded differently in each JVM.
             return "Input state (JSON):\n"
-                    + objectMapper.writeValueAsString(request.state().payload());
+                    + objectMapper.writer()
+                            .with(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
+                            .writeValueAsString(request.state().payload());
         } catch (Exception e) {
             throw new ProviderRejectedException(
                     "Generative request state could not be serialized", e);

@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -21,6 +22,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import com.rivell.workbench.evaluation.ScriptedModelConfiguration;
 import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
@@ -36,10 +38,11 @@ import com.rivell.workbench.organization.UserIdentity;
  * conflict existed. Individually reviewed and published candidates remain advisory-only -
  * this is the boundary where the product decided freshness must be checked.
  */
-// The scripted provider is what makes semantic compilation succeed without an API key, and a
+// The scripted test provider is what makes semantic compilation succeed without an API key, and a
 // candidate is only ROUTINE when its concept classified confidently. Each test uses its own
-// organization, so the demo seed that this property also triggers cannot affect these assertions.
-@SpringBootTest(properties = "rivell.demo.seed-enabled=true")
+// organization, so tests cannot affect each other's assertions.
+@SpringBootTest
+@Import(ScriptedModelConfiguration.class)
 @Testcontainers
 class KnowledgeBulkApprovalFreshnessIT {
 
@@ -164,11 +167,11 @@ class KnowledgeBulkApprovalFreshnessIT {
 
     private KnowledgeArtifact ingestRoutinePlaybook(String filename) throws Exception {
         try (var stream = getClass().getClassLoader()
-                .getResourceAsStream("demo/documents/Rivell Demo Routine Playbook.docx")) {
-            assertThat(stream).as("demo routine playbook").isNotNull();
+                .getResourceAsStream("fixtures/knowledge-routine-playbook.docx")) {
+            assertThat(stream).as("routine playbook fixture").isNotNull();
             return ingestionService.ingest(filename, DOCX_MEDIA_TYPE, ArtifactType.PLAYBOOK,
                     new ArtifactManifest(Set.of(), null, null, null, null, null, null, null,
-                            "Rivell local demo scenario data"),
+                            "Rivell test fixture"),
                     stream);
         }
     }

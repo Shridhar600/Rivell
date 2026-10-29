@@ -14,7 +14,10 @@
     "typecheck": "tsc -b --pretty false",
     "test": "vitest run",
     "test:watch": "vitest",
-    "generate:api": "openapi-typescript \"${OPENAPI_SCHEMA:-./openapi/openapi.json}\" -o \"${OPENAPI_OUTPUT:-./src/api/schema.d.ts}\""
+    "generate:api": "openapi-typescript \"${OPENAPI_SCHEMA:-./openapi/openapi.json}\" -o \"${OPENAPI_OUTPUT:-./src/api/schema.d.ts}\"",
+    "dev:demo": "vite --mode demo --port 4185 --strictPort",
+    "build:demo": "tsc -b && vite build --mode demo",
+    "check:no-demo": "npm run build && node scripts/check-no-demo.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",

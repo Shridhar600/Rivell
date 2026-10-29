@@ -97,7 +97,13 @@ final class PositionSearch {
         var lanes = new LinkedHashMap<String, List<RankFusion.LaneHit>>();
         lanes.put("lexical", PrecedentLane.lanesOf(lexical));
         lanes.put("vector", PrecedentLane.lanesOf(vector));
-        var fused = RankFusion.fuse(lanes);
+        var contentKeys = new LinkedHashMap<UUID, String>();
+        for (var entry : byId.entrySet()) {
+            var candidate = entry.getValue().candidate();
+            contentKeys.put(entry.getKey(), candidate.effectiveTitle() + "\n"
+                    + java.util.Objects.toString(candidate.effectiveContentText(), ""));
+        }
+        var fused = RankFusion.fuse(lanes, contentKeys);
         fused = fused.size() <= limit ? fused : fused.subList(0, limit);
 
         var found = new ArrayList<PublishedCandidate>();

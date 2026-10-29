@@ -1,5 +1,6 @@
 package com.rivell.workbench.intelligence;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -48,15 +49,24 @@ public record ReasoningSpec(
         if (fields == null || fields.isEmpty()) {
             throw new IllegalArgumentException("A reasoning spec requires at least one field");
         }
-        fields = new LinkedHashMap<>(fields);
-        allowedValues = allowedValues == null ? Map.of() : Map.copyOf(allowedValues);
+        fields = StableOrder.map(fields);
+        if (allowedValues == null) {
+            allowedValues = Map.of();
+        } else {
+            var orderedKeys = StableOrder.map(allowedValues);
+            var orderedValues = new LinkedHashMap<String, Set<String>>();
+            for (var entry : orderedKeys.entrySet()) {
+                orderedValues.put(entry.getKey(), StableOrder.set(entry.getValue()));
+            }
+            allowedValues = Collections.unmodifiableMap(orderedValues);
+        }
         for (var name : allowedValues.keySet()) {
             if (!fields.containsKey(name)) {
                 throw new IllegalArgumentException(
                         "Allowed values declared for unknown field " + name);
             }
         }
-        listFields = listFields == null ? Set.of() : Set.copyOf(listFields);
+        listFields = listFields == null ? Set.of() : StableOrder.set(listFields);
         for (var name : listFields) {
             if (!fields.containsKey(name)) {
                 throw new IllegalArgumentException(
