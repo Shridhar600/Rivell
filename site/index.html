@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rivell · Contract review on your terms</title>
+  <meta name="description" content="Rivell learns your team's negotiating positions, reviews every contract against them, and returns a checked redline in Word. Open source.">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111214">
+  <link rel="canonical" href="https://rivell.shridharvijay.com/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Rivell">
+  <meta property="og:title" content="Rivell · Contract review on your terms">
+  <meta property="og:description" content="Every contract, held to your standard. Rivell reviews contracts against your own playbook and returns the redline in Word.">
+  <meta property="og:url" content="https://rivell.shridharvijay.com/">
+  <meta property="og:image" content="https://rivell.shridharvijay.com/assets/media/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Rivell review workspace, showing findings, the contract and a suggested change.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Rivell · Contract review on your terms">
+  <meta name="twitter:description" content="Every contract, held to your standard. Rivell reviews contracts against your own playbook and returns the redline in Word.">
+  <meta name="twitter:image" content="https://rivell.shridharvijay.com/assets/media/og-image.jpg">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap">
+  <link rel="stylesheet" href="/assets/css/site.css">
+  <script>(function(){var r=document.documentElement,t;try{t=localStorage.getItem('rivell-theme')}catch(e){}if(t==='light'||t==='dark')r.setAttribute('data-theme',t);r.classList.add('js')})()</script>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://rivell.shridharvijay.com/#website",
+      "url": "https://rivell.shridharvijay.com/",
+      "name": "Rivell",
+      "inLanguage": "en",
+      "publisher": { "@id": "https://rivell.shridharvijay.com/#person" }
+    },
+    {
+      "@type": "Person",
+      "@id": "https://rivell.shridharvijay.com/#person",
+      "name": "Shridhar Vijay",
+      "url": "https://shridharvijay.com",
+      "sameAs": ["https://github.com/Shridhar600"]
+    },
+    {
+      "@type": "SoftwareApplication",
+      "@id": "https://rivell.shridharvijay.com/#software",
+      "name": "Rivell",
+      "applicationCategory": "BusinessApplication",
+      "description": "Contract review software that checks each clause against your playbook and returns a redline in Word.",
+      "url": "https://rivell.shridharvijay.com/",
+      "codeRepository": "https://github.com/Shridhar600/Rivell",
+      "license": "https://www.apache.org/licenses/LICENSE-2.0",
+      "isAccessibleForFree": true,
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "author": { "@id": "https://rivell.shridharvijay.com/#person" }
+    }
+  ]
+}
+</script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><symbol id="rivell-logo" viewBox="0.0 -762.7 2158.2 773.4"><path d="M184.57 0L52.73 0L52.73-727.54L325.68-727.54Q409.67-727.54 466.55-698.24Q523.44-668.95 552.73-616.46Q582.03-563.96 582.03-494.63L582.03-494.63Q582.03-424.80 552.49-373.54Q522.95-322.27 465.33-294.43Q407.71-266.60 323.73-266.60L323.73-266.60L129.88-266.60L129.88-375.49L305.66-375.49Q354.98-375.49 386.47-389.16Q417.97-402.83 432.86-429.44Q447.75-456.05 447.75-494.63L447.75-494.63Q447.75-533.20 432.62-560.79Q417.48-588.38 386.23-602.78Q354.98-617.19 305.18-617.19L305.18-617.19L184.57-617.19L184.57 0ZM608.89 0L461.43 0L285.16-330.08L428.71-330.08L608.89 0Z M759.06 0L630.64 0L630.64-545.90L759.06-545.90L759.06 0ZM695.10-622.56L695.10-622.56Q664.34-622.56 642.36-643.07Q620.39-663.57 620.39-692.38L620.39-692.38Q620.39-721.68 642.36-742.19Q664.34-762.70 695.10-762.70L695.10-762.70Q725.37-762.70 747.34-742.19Q769.32-721.68 769.32-692.87L769.32-692.87Q769.32-663.57 747.34-643.07Q725.37-622.56 695.10-622.56Z M1175.35-545.90L1311.09-545.90L1116.76 0L974.18 0L780.33-545.90L917.54-545.90L1044.00-140.14L1049.86-140.14L1175.35-545.90Z M1574.06 10.74L1574.06 10.74Q1492.03 10.74 1432.46-23.68Q1372.89-58.11 1340.91-121.09Q1308.93-184.08 1308.93-269.53L1308.93-269.53Q1308.93-354.00 1340.66-417.72Q1372.40-481.45 1430.02-517.09Q1487.64-552.73 1565.76-552.73L1565.76-552.73Q1616.05-552.73 1661.22-536.62Q1706.39-520.51 1741.30-486.82Q1776.21-453.13 1796.23-401.12Q1816.25-349.12 1816.25-277.34L1816.25-277.34L1816.25-237.30L1368.98-237.30L1368.98-323.73L1752.29-323.73L1692.23-298.34Q1692.23-344.73 1678.07-379.15Q1663.91-413.57 1636.07-433.11Q1608.24-452.64 1566.74-452.64L1566.74-452.64Q1525.23-452.64 1495.94-433.11Q1466.64-413.57 1451.50-380.62Q1436.37-347.66 1436.37-307.13L1436.37-307.13L1436.37-247.07Q1436.37-197.27 1453.70-161.87Q1471.04-126.46 1502.53-107.91Q1534.02-89.36 1576.02-89.36L1576.02-89.36Q1603.36-89.36 1626.06-97.17Q1648.77-104.98 1665.13-120.85Q1681.48-136.72 1690.27-160.16L1690.27-160.16L1810.39-146.00Q1798.67-98.63 1767.18-63.23Q1735.68-27.83 1686.61-8.54Q1637.54 10.74 1574.06 10.74Z" fill="currentColor"/><rect x="1888.2" y="-727.5" width="85.0" height="727.5" rx="42.5" style="fill: var(--teal)"/><rect x="2073.2" y="-727.5" width="85.0" height="727.5" rx="42.5" style="fill: var(--teal)"/></symbol></svg>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav" data-nav>
+    <div class="wrap nav-inner">
+      <a class="brand" href="/" aria-label="Rivell home"><svg class="logo" viewBox="0 0 2158.2 773.4" aria-hidden="true" focusable="false"><use href="#rivell-logo"/></svg></a>
+      <nav class="nav-links" aria-label="Main">
+        <a class="hide-sm" href="#how">How it works</a>
+        <a href="/technology/">Technology</a>
+        <a class="nav-gh" href="https://github.com/Shridhar600/Rivell" aria-label="Rivell on GitHub"><svg class="gh-mark" width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg><span class="hide-sm">GitHub</span></a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to dark theme"><svg class="i-moon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.6 9.7A5.6 5.6 0 0 1 6.3 2.4a5.6 5.6 0 1 0 7.3 7.3Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="i-sun" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3.05 3.05l1.13 1.13M11.82 11.82l1.13 1.13M3.05 12.95l1.13-1.13M11.82 4.18l1.13-1.13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+        <a class="btn btn-primary nav-cta" href="/demo/">Try the demo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <h1 class="display" aria-label="Every contract, held to your standard." data-headline><span>Every contract, held to </span><span class="rl-del" data-word="their" aria-hidden="true"></span><wbr><span class="rl-ins">your</span> <span>standard.</span></h1>
+          <div class="hero-sub">
+          <p class="lead">Rivell learns your negotiating positions from the playbooks you already keep, reviews every contract against them, and returns the redline in Word. You make every call.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/demo/">Try the demo <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h9m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+            <a class="btn btn-ghost" href="#how">See how it works</a>
+          </div>
+          </div>
+        </div>
+
+        <div class="stage-track" data-track>
+        <div class="stage-pin canvas" data-pin>
+        <div class="stage is-note is-strike is-insert is-verified" data-stage aria-hidden="true">
+          <div class="sheet stage-doc">
+            <div class="stage-bar">
+              <span class="ui-file stage-swap" data-s="file">Kestrel Assurance - Master Services Agreement.docx</span>
+              <span class="stage-right"><span class="stage-dots"><span><i></i></span><span><i></i></span><span><i></i></span></span><span class="stage-status"><span class="pulse"></span><span data-s="status">Reviewing</span></span></span>
+            </div>
+            <div class="stage-swap">
+              <p class="stage-title" data-s="title">MASTER SERVICES AGREEMENT</p>
+              <p class="stage-parties" data-s="parties">Bramber Software Limited and Kestrel Assurance Group plc</p>
+              <div class="doc-text">
+                <p class="stage-ctx" data-s="before">12.1 Neither party limits its liability for death or personal injury caused by negligence, or for fraud.</p>
+                <div class="stage-clause is-resolved" data-s-clause>
+                  <p class="stage-h" data-s="heading">12. Limitation of liability</p>
+                  <p><span data-s="pre">12.2 Each party's aggregate liability under this Agreement shall not exceed </span><span class="s-del" data-s="del">three times the annual Fees</span><span class="s-ins" data-s="ins"> the Fees paid or payable in the 12 months before the claim</span><span data-s="post">.</span></p>
+                </div>
+                <p class="stage-ctx" data-s="after">12.3 The limit in clause 12.2 applies to each party, and not only to the Supplier.</p>
+                <p class="stage-ctx stage-h" data-s="nextHeading">13. Term and renewal</p>
+                <p class="stage-ctx" data-s="next">13.1 This Agreement starts on the Effective Date and continues for the Initial Term in the Order Form.</p>
+              </div>
+            </div>
+            <div class="stage-toast"><span class="ui-tick"></span><span>Verified in the Word file</span></div>
+          </div>
+
+          <div class="stage-note">
+            <div class="stage-swap">
+              <p class="ui-k" data-s="noteKey">Your playbook · Liability cap</p>
+              <p class="pos" data-s="notePos">Cap at the fees for 12 months. Walk away above two times the annual fees.</p>
+              <p class="src" data-s="noteSrc">Commercial Contracts Playbook v4.2</p>
+              <hr>
+              <p class="finding"><span class="ui-dot is-red" data-s-dot></span><span data-s="finding">Liability cap is above your limit</span></p>
+              <div class="acts"><span class="ui-btn is-done" data-s-accept>Accepted</span><span class="ui-btn">Edit</span><span class="ui-btn">Escalate</span></div>
+            </div>
+          </div>
+
+        </div>
+        </div>
+        </div>
+        <script>if (!matchMedia('(prefers-reduced-motion: reduce)').matches) document.querySelector('[data-stage]').className = 'stage';</script>
+      </div>
+    </section>
+
+    <!-- The work -->
+    <section class="statement-sec">
+      <div class="wrap">
+        <p class="statement reveal"><span class="dim">Spotting a risky clause is easy.</span> Knowing what your team will accept is the work.</p>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="how" id="how">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 class="title reveal">From your playbook to a finished redline.</h2>
+        </div>
+
+        <div class="how-grid">
+          <ol class="how-steps" data-how>
+            <li class="how-step is-active" data-step="0">
+              <h3>Teach it your positions</h3>
+              <p>Add the playbooks and clause libraries you already use, in Word or Excel. Rivell reads each entry into a position, and you approve every one before it is used.</p>
+
+              <figure class="fig" data-fig="0">
+                <div class="sheet fp">
+                  <div class="fp-head"><span class="ui-file">Commercial Contracts Playbook v4.2.docx</span><span class="ui-k">Entry 1 of 25</span></div>
+                  <div class="fp-body">
+                    <div class="teach-grid">
+                      <div class="teach-src">
+                        <span class="ui-k">Source passage</span>
+                        <h4>Liability cap</h4>
+                        <table>
+                          <tr><td>Our position</td><td>Aggregate liability is capped at the fees paid or payable in the 12 months before the claim.</td></tr>
+                          <tr><td>Fallback</td><td>24 months' fees where the contract value is at least £250,000.</td></tr>
+                          <tr><td>Walk-away</td><td>Uncapped liability, or a cap above two times the annual fees.</td></tr>
+                          <tr><td>Approver</td><td>Tom Whitlock. Marcus Feld and Priya Raghavan for any increase.</td></tr>
+                        </table>
+                      </div>
+                      <div class="teach-arrow"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h9m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+                      <div class="teach-read">
+                        <span class="ui-k">What Rivell read</span>
+                        <dl>
+                          <div class="row rv"><dt>Topic</dt><dd>Liability cap</dd></div>
+                                                    <div class="row rv"><dt>Preferred wording</dt><dd>Fees for 12 months</dd></div>
+                          <div class="row rv"><dt>Fallback wording</dt><dd>Fees for 24 months, contracts of £250,000 or more</dd></div>
+                          <div class="row rv"><dt>Walk-away wording</dt><dd>Uncapped, or above two times annual fees</dd></div>
+                          <div class="row rv"><dt>Approvals</dt><dd>Marcus Feld, Priya Raghavan</dd></div>
+                          <div class="row rv"><dt>Applies to</dt><dd>MSA, order form</dd></div>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="fp-foot"><span class="q">Does this match the playbook source?</span><span class="acts"><span class="ui-btn">Edit</span><span class="ui-btn is-primary">Approve entry</span></span></div>
+                </div>
+              </figure>
+            </li>
+
+            <li class="how-step" data-step="1">
+              <h3>Drop in a contract</h3>
+              <p>Rivell reads the contract, works out which side you are on, and checks every clause against each position that applies, even when the wording differs.</p>
+
+              <figure class="fig" data-fig="1">
+                <div class="sheet fp">
+                  <div class="fp-head"><span class="ui-file">Kestrel Assurance - Master Services Agreement.docx</span><span class="scan-meta"><span class="scan-bar"><span></span></span>Supplier side</span></div>
+                  <div class="fp-body">
+                    <ol class="clause-list">
+                      <li class="rv"><span class="num">4</span><span class="nm">Fees and payment</span><span class="st"><span class="ui-tick"></span>Checked, no issue found</span></li>
+                      <li class="rv"><span class="num">9</span><span class="nm">Confidentiality</span><span class="st"><span class="ui-tick"></span>Checked, no issue found</span></li>
+                      <li class="rv is-flag"><span class="num">12</span><span class="nm">Limitation of liability</span><span class="st is-flag"><span class="ui-dot is-red"></span>Flagged</span></li>
+                      <li class="rv"><span class="num">13</span><span class="nm">Term and renewal</span><span class="st is-flag"><span class="ui-dot"></span>Flagged</span></li>
+                      <li class="rv"><span class="num">15</span><span class="nm">Audit</span><span class="st is-look"><span class="ui-dot"></span>Needs your look</span></li>
+                      <li class="rv"><span class="num">17</span><span class="nm">Governing law</span><span class="st"><span class="ui-tick"></span>Checked, no issue found</span></li>
+                      <li class="rv"><span class="num">19</span><span class="nm">Force majeure</span><span class="st"><span class="ui-tick"></span>Checked, no issue found</span></li>
+                    </ol>
+                  </div>
+                  <div class="fp-foot"><span class="q">Checked against your commercial playbook and clause library</span></div>
+                </div>
+              </figure>
+            </li>
+
+            <li class="how-step" data-step="2">
+              <h3>See the gap, make the call</h3>
+              <p>Each finding shows the clause, your position and the gap, with wording your team already approved. Accept it, edit it, keep the clause, or escalate it.</p>
+
+              <figure class="fig" data-fig="2">
+                <div class="sheet fp">
+                  <div class="fp-body">
+                    <div class="fd-sec rv">
+                      <span class="ui-sev is-red">Breaches walk-away · 12.4 Limitation of liability</span>
+                      <p class="fd-title">Unlimited liability for data protection claims</p>
+                    </div>
+                    <div class="fd-sec rv">
+                      <span class="ui-k">What the contract says</span>
+                      <p class="fd-quote">Nothing in this Agreement limits the Supplier's liability for any breach of Data Protection Laws, including regulatory fines.</p>
+                    </div>
+                    <div class="fd-sec rv">
+                      <span class="ui-k">Your playbook</span>
+                      <p class="fd-text">Do not accept an uncapped data protection category. A separate cap of two times the annual fee is acceptable.</p>
+                    </div>
+                    <div class="fd-sec rv">
+                      <span class="ui-k">The gap</span>
+                      <p class="fd-text">The clause leaves the Supplier exposed without limit for data protection claims, which your playbook marks as a walk-away.</p>
+                    </div>
+                    <div class="fd-sec rv">
+                      <span class="ui-k">Suggested change</span>
+                      <p class="fd-sugg"><ins class="tc">Each party's liability for breach of Data Protection Laws shall not exceed two times the annual Fees.</ins></p>
+                      <p class="fd-src">Approved organizational drafting · Clause library</p>
+                    </div>
+                    <div class="fd-sec rv">
+                      <p class="fd-approve"><span class="ui-dot"></span>Approval required: Marcus Feld and Priya Raghavan</p>
+                    </div>
+                    <div class="fd-sec rv">
+                      <div class="fd-acts"><span class="ui-btn is-primary">Accept</span><span class="ui-btn">Edit</span><span class="ui-btn">Keep as drafted</span><span class="ui-btn">Dismiss</span><span class="ui-btn">Escalate</span></div>
+                    </div>
+                  </div>
+                </div>
+              </figure>
+            </li>
+
+            <li class="how-step" data-step="3">
+              <h3>Send back a clean redline</h3>
+              <p>Rivell writes your accepted changes into the original Word file as tracked changes, then reads the file back to check each one.</p>
+
+              <figure class="fig" data-fig="3">
+                <div class="fp">
+                  <div class="word">
+                    <div class="word-page sheet">
+                      <p class="t">MASTER SERVICES AGREEMENT</p>
+                      <p class="rv"><b>12. Limitation of liability</b></p>
+                      <p class="rv chg">12.2 Each party's aggregate liability under this Agreement shall not exceed <del class="tc">three times the annual Fees</del> <ins class="tc">the Fees paid or payable in the 12 months before the claim</ins>.</p>
+                      <p class="rv chg">12.4 <ins class="tc">Each party's liability for breach of Data Protection Laws shall not exceed two times the annual Fees.</ins> <del class="tc">Nothing in this Agreement limits the Supplier's liability for any breach of Data Protection Laws.</del></p>
+                      <p class="rv"><b>13. Term and renewal</b></p>
+                      <p class="rv chg">13.2 This Agreement renews for successive periods of <del class="tc">twenty-four (24)</del> <ins class="tc">twelve (12)</ins> months unless either party gives notice.</p>
+                    </div>
+                    <div class="balloons">
+                      <div class="balloon rv"><b>Bramber Legal</b><span>Your standard · Liability cap</span></div>
+                      <div class="balloon rv"><b>Bramber Legal</b><span>Approved by Marcus Feld</span></div>
+                      <div class="balloon rv is-held"><b>Held</b><span>Escalated to Priya Raghavan</span></div>
+                    </div>
+                  </div>
+                  <div class="dl">
+                    <span class="dl-file"><span class="ui-file"></span><span>Kestrel MSA - Bramber redline.docx<small>Checked against your changes</small></span></span>
+                    <span class="verified"><span class="ui-tick"></span>Verified redline · 3 changes</span>
+                  </div>
+                </div>
+              </figure>
+            </li>
+          </ol>
+
+          <div class="how-stage" data-how-stage aria-hidden="true"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- The real workspace -->
+    <section class="real" id="workspace">
+      <div class="wrap">
+        <div class="section-head is-center">
+          <h2 class="title reveal">One screen for every decision.</h2>
+          <p class="lead reveal">The findings, the contract with its tracked changes, and your decision, side by side.</p>
+        </div>
+        <figure class="shot reveal">
+          <div class="canvas">
+            <div class="window">
+              <img class="for-dark" src="/assets/media/workspace-dark-1440.webp" srcset="/assets/media/workspace-dark-1440.webp 1440w, /assets/media/workspace-dark-2880.webp 2880w" sizes="(max-width: 1240px) 92vw, 1100px" width="2880" height="1800" loading="lazy" decoding="async" alt="The Rivell review workspace. On the left, ten findings for the Kestrel master services agreement. In the middle, the indemnities clause with tracked changes. On the right, the finding with the playbook position, the gap and the suggested wording.">
+              <img class="for-light" src="/assets/media/workspace-1440.webp" srcset="/assets/media/workspace-1440.webp 1440w, /assets/media/workspace-2880.webp 2880w" sizes="(max-width: 1240px) 92vw, 1100px" width="2880" height="1800" loading="lazy" decoding="async" alt="The Rivell review workspace. On the left, ten findings for the Kestrel master services agreement. In the middle, the indemnities clause with tracked changes. On the right, the finding with the playbook position, the gap and the suggested wording.">
+            </div>
+          </div>
+          <figcaption>The review workspace, on the demo contracts.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- Your standard -->
+    <section class="standard" id="standard">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 class="title reveal">Change the standard, and the review follows.</h2>
+          <p class="lead reveal">Rivell has no opinion of its own. It applies yours. Move the sliders and watch three contracts change their answer.</p>
+        </div>
+
+        <div class="std reveal" data-standard>
+          <div class="sheet std-panel">
+            <span class="ui-k">Your playbook</span>
+            <h4>Payment terms</h4>
+            <div class="range">
+              <div class="range-top"><label for="pref">We prefer payment within</label><output for="pref" data-out="pref">30 days</output></div>
+              <input id="pref" type="range" min="15" max="60" step="15" value="30" data-in="pref">
+            </div>
+            <div class="range">
+              <div class="range-top"><label for="fall">We can accept up to</label><output for="fall" data-out="fall">60 days</output></div>
+              <input id="fall" type="range" min="30" max="120" step="15" value="60" data-in="fall">
+            </div>
+            <p class="std-summary" data-summary>Invoices are payable within 30 days. A term of up to 60 days is acceptable as a fallback.</p>
+          </div>
+
+          <div>
+            <div class="std-cards" aria-live="polite">
+              <div class="sheet std-card" data-card="45">
+                <div class="who"><b>Kestrel Assurance</b><span>Order form, clause 6.1</span></div>
+                <p class="cl">Invoices are payable within <span data-cl>forty-five (45)</span> days of receipt.</p>
+                <p class="verdict" data-verdict></p>
+              </div>
+              <div class="sheet std-card" data-card="60">
+                <div class="who"><b>Vantage Health</b><span>Services agreement, clause 7.2</span></div>
+                <p class="cl">Invoices are payable within <span data-cl>sixty (60)</span> days of receipt.</p>
+                <p class="verdict" data-verdict></p>
+              </div>
+              <div class="sheet std-card" data-card="90">
+                <div class="who"><b>Sablepoint Analytics</b><span>Master agreement, clause 5.3</span></div>
+                <p class="cl">Invoices are payable within <span data-cl>ninety (90)</span> days of receipt.</p>
+                <p class="verdict" data-verdict></p>
+              </div>
+            </div>
+            <p class="std-note">A simplified illustration. In a real review, Rivell judges the full wording of each clause against the text of your playbook, not a single number.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Principles -->
+    <section class="principles" id="principles">
+      <div class="wrap">
+        <div class="section-head is-center">
+          <h2 class="title reveal">Built to earn a lawyer's trust.</h2>
+        </div>
+        <div class="pr-grid">
+          <article class="pr reveal">
+            <h3>Your playbook outranks old deals</h3>
+            <p>A similar clause from a past deal never overrides your playbook. Rivell weighs each source by its authority before it looks at how similar it is.</p>
+          </article>
+          <article class="pr reveal">
+            <h3>Findings cite their sources</h3>
+            <p>Each finding shows the clause, the position it was judged against, and the playbook and version that position came from.</p>
+          </article>
+          <article class="pr reveal">
+            <h3>Close calls come to you</h3>
+            <p>A close call gets a second opinion. If the two opinions disagree, the clause is marked for your look instead of guessed.</p>
+          </article>
+          <article class="pr reveal">
+            <h3>No position is skipped in silence</h3>
+            <p>Each position in your playbook is marked as checked, not found in this contract, or not checked, with the reason.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- Under the hood -->
+    <section class="night" id="engine">
+      <div class="wrap teaser">
+        <div class="teaser-copy">
+          <h2 class="title reveal">Most of the judgment comes from a System One model.</h2>
+          <p class="lead reveal">Jev, a System One decision model, judges each clause and says how sure it is. Close calls get a second opinion from a language model, and disagreements come to you. Plain code sets severity and checks the Word file.</p>
+          <p class="reveal"><a class="link" href="/technology/">See how the engine works <svg class="arrow" width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h9m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a></p>
+        </div>
+
+        <svg class="flow reveal" viewBox="0 0 520 400" role="img" aria-labelledby="flow-title">
+          <title id="flow-title">A clause goes to Jev. A clear answer becomes a finding, and rules set its severity. A close call goes to a language model for a second opinion. If they agree, it becomes a finding. If they disagree, it needs your look.</title>
+          <defs>
+            <marker id="fa" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 .5 7 4 0 7.5" fill="none" stroke="#6E7973" stroke-width="1.3"/></marker>
+            <marker id="ft" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 .5 7 4 0 7.5" fill="none" stroke="#5CC8B6" stroke-width="1.3"/></marker>
+          </defs>
+          <g fill="none" stroke-width="1.5">
+            <path d="M260 64 V100" stroke="#3A4742" marker-end="url(#fa)"/>
+            <path d="M180 158 V180 Q180 192 168 192 H142 Q130 192 130 204 V222" stroke="#5CC8B6" marker-end="url(#ft)"/>
+            <path d="M340 158 V180 Q340 192 352 192 H378 Q390 192 390 204 V222" stroke="#3A4742" marker-end="url(#fa)"/>
+            <path d="M280 253 H244" stroke="#3A4742" marker-end="url(#fa)"/>
+            <path d="M390 280 V322" stroke="#3A4742" marker-end="url(#fa)"/>
+            <path d="M130 280 V322" stroke="#5CC8B6" marker-end="url(#ft)"/>
+          </g>
+          <g font-family="Geist, sans-serif" font-size="12.5" fill="#9AA49F">
+            <text x="122" y="214" text-anchor="end">Clear answer</text>
+            <text x="398" y="214">Close call</text>
+            <text x="262" y="244" text-anchor="middle">Agree</text>
+            <text x="398" y="306">Disagree</text>
+          </g>
+          <g font-family="Geist, sans-serif">
+            <rect x="160" y="10" width="200" height="54" rx="12" fill="#18201D" stroke="#2A3430"/>
+            <text x="180" y="33" font-size="15" font-weight="600" fill="#E8ECE9">Clause 12.2</text>
+            <text x="180" y="52" font-size="12.5" fill="#9AA49F">From the contract</text>
+            <rect x="90" y="104" width="340" height="54" rx="12" fill="#18201D" stroke="#2A3430"/>
+            <text x="110" y="127" font-size="15" font-weight="600" fill="#E8ECE9">Jev judges it</text>
+            <text x="110" y="146" font-size="12.5" fill="#9AA49F">Against every position that applies</text>
+            <rect x="20" y="226" width="220" height="54" rx="12" fill="#18201D" stroke="#2A3430"/>
+            <text x="40" y="249" font-size="15" font-weight="600" fill="#E8ECE9">Finding</text>
+            <text x="40" y="268" font-size="12.5" fill="#9AA49F">Cites your playbook</text>
+            <rect x="280" y="226" width="220" height="54" rx="12" fill="#18201D" stroke="#2A3430"/>
+            <text x="300" y="249" font-size="15" font-weight="600" fill="#E8ECE9">Second opinion</text>
+            <text x="300" y="268" font-size="12.5" fill="#9AA49F">From a language model</text>
+            <rect x="20" y="326" width="220" height="54" rx="12" fill="#18201D" stroke="#2A3430"/>
+            <text x="40" y="349" font-size="15" font-weight="600" fill="#E8ECE9">Rules set severity</text>
+            <text x="40" y="368" font-size="12.5" fill="#9AA49F">Never model confidence</text>
+            <rect x="280" y="326" width="220" height="54" rx="12" fill="#1F1A12" stroke="#8A5A22" stroke-dasharray="4 4"/>
+            <text x="300" y="349" font-size="15" font-weight="600" fill="#E9B776">Needs your look</text>
+            <text x="300" y="368" font-size="12.5" fill="#B9946A">Never guessed</text>
+          </g>
+        </svg>
+        <ol class="flow-list reveal" aria-hidden="true">
+          <li><b>Jev judges the clause</b>Against every position in your playbook that applies.</li>
+          <li><b>A clear answer becomes a finding</b>Rules set its severity, never model confidence.</li>
+          <li><b>A close call gets a second opinion</b>From a language model.</li>
+          <li class="is-you"><b>A disagreement needs your look</b>Rivell does not guess.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- Open + maker -->
+    <section class="open">
+      <div class="wrap open-grid">
+        <div class="open-card reveal">
+          <h3>Open, and yours to run</h3>
+          <p>Rivell is open source. You run it on your own infrastructure, so contracts and knowledge stay in your own database. Today it reviews Word contracts in English, for one user on one machine. Read the code, or run it yourself.</p>
+          <div class="links">
+            <a class="link" href="https://github.com/Shridhar600/Rivell">View the source on GitHub</a>
+          </div>
+        </div>
+        <div class="open-card reveal">
+          <h3>Made by Shridhar Vijay</h3>
+          <p>Rivell is a personal project, built end to end from the engine to the interface. It explores how a System One decision model and a language model can share the work in a field where precision matters.</p>
+          <div class="links">
+            <a class="link" href="https://shridharvijay.com">shridharvijay.com</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Closing -->
+    <section class="closing">
+      <div class="wrap">
+        <div class="closing-card reveal">
+          <div>
+            <h2 class="title">See it on a real contract.</h2>
+            <p>The demo follows a fictional software company through five contracts, from the first read to a checked redline. No sign-up needed.</p>
+          </div>
+          <div class="acts">
+            <a class="btn btn-primary" href="/demo/">Try the demo <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h9m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap">
+      <div class="foot-row">
+        <a class="foot-brand" href="/" aria-label="Rivell home"><svg class="logo" viewBox="0 0 2158.2 773.4" aria-hidden="true" focusable="false"><use href="#rivell-logo"/></svg></a>
+        <nav class="foot-links" aria-label="Footer">
+          <a href="/#how">How it works</a>
+          <a href="/technology/">Technology</a>
+          <a href="/demo/">Demo</a>
+          <a href="https://github.com/Shridhar600/Rivell">GitHub</a>
+          <a href="https://shridharvijay.com">Shridhar Vijay</a>
+        </nav>
+      </div>
+      <div class="foot-base">
+        <span>© 2026 Shridhar Vijay. Open source under the Apache 2.0 licence.</span>
+        <span>Rivell assists legal review. It does not give legal advice.</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/assets/js/site.js" defer></script>
+  <script src="/assets/js/home.js" defer></script>
+</body>
+</html>

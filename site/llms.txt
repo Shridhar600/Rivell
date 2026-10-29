@@ -1,0 +1,16 @@
+# Rivell
+
+Rivell is contract review software. It checks each clause against a team's own playbook, keeps a person in charge of every change, and returns a redline in Word.
+
+The person using it approves every playbook entry and decides every finding. Accepted changes are written into the original Word file as tracked changes, read back, and checked before the file is offered for download.
+
+Rivell is open source and self-hosted. Contracts and knowledge stay in your own database.
+
+Pages:
+- /: what Rivell does and how a review works
+- /technology/: how Rivell reviews a contract
+- /demo/: a demo on fictional contracts
+
+Source repository: https://github.com/Shridhar600/Rivell
+
+Rivell assists legal review. It does not give legal advice.

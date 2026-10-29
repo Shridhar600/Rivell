@@ -1,0 +1,28 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), browsing-topics=()
+  Cross-Origin-Opener-Policy: same-origin
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-2tlRViFPFSEJVCaVc0iDmjYNEOTfUVOYBvAvyAFJcBI=' 'sha256-rhsiHABDLHz/SIkOQgLAVArn6B5rsatBzBz9Hmixfwc=' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; upgrade-insecure-requests
+
+https://:project.pages.dev/*
+  X-Robots-Tag: noindex
+
+https://:version.:project.pages.dev/*
+  X-Robots-Tag: noindex
+
+/demo/*
+  X-Robots-Tag: noindex
+
+/assets/css/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/assets/js/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/assets/brand/*
+  Cache-Control: public, max-age=86400
+
+/assets/media/*
+  Cache-Control: public, max-age=86400

@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>How Rivell reviews a contract</title>
+  <meta name="description" content="How Rivell reviews a contract: a System One decision model, a language model, hybrid search and plain rules, each doing the part it does best.">
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111214">
+  <link rel="canonical" href="https://rivell.shridharvijay.com/technology/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Rivell">
+  <meta property="og:title" content="How Rivell reviews a contract">
+  <meta property="og:description" content="A System One decision model, a language model, hybrid search and plain rules, working together on every clause.">
+  <meta property="og:url" content="https://rivell.shridharvijay.com/technology/">
+  <meta property="og:image" content="https://rivell.shridharvijay.com/assets/media/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="The Rivell review workspace, showing findings, the contract and a suggested change.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="How Rivell reviews a contract">
+  <meta name="twitter:description" content="A System One decision model, a language model, hybrid search and plain rules, working together on every clause.">
+  <meta name="twitter:image" content="https://rivell.shridharvijay.com/assets/media/og-image.jpg">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap">
+  <link rel="stylesheet" href="/assets/css/site.css">
+  <script>(function(){var r=document.documentElement,t;try{t=localStorage.getItem('rivell-theme')}catch(e){}if(t==='light'||t==='dark')r.setAttribute('data-theme',t);r.classList.add('js')})()</script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><symbol id="rivell-logo" viewBox="0.0 -762.7 2158.2 773.4"><path d="M184.57 0L52.73 0L52.73-727.54L325.68-727.54Q409.67-727.54 466.55-698.24Q523.44-668.95 552.73-616.46Q582.03-563.96 582.03-494.63L582.03-494.63Q582.03-424.80 552.49-373.54Q522.95-322.27 465.33-294.43Q407.71-266.60 323.73-266.60L323.73-266.60L129.88-266.60L129.88-375.49L305.66-375.49Q354.98-375.49 386.47-389.16Q417.97-402.83 432.86-429.44Q447.75-456.05 447.75-494.63L447.75-494.63Q447.75-533.20 432.62-560.79Q417.48-588.38 386.23-602.78Q354.98-617.19 305.18-617.19L305.18-617.19L184.57-617.19L184.57 0ZM608.89 0L461.43 0L285.16-330.08L428.71-330.08L608.89 0Z M759.06 0L630.64 0L630.64-545.90L759.06-545.90L759.06 0ZM695.10-622.56L695.10-622.56Q664.34-622.56 642.36-643.07Q620.39-663.57 620.39-692.38L620.39-692.38Q620.39-721.68 642.36-742.19Q664.34-762.70 695.10-762.70L695.10-762.70Q725.37-762.70 747.34-742.19Q769.32-721.68 769.32-692.87L769.32-692.87Q769.32-663.57 747.34-643.07Q725.37-622.56 695.10-622.56Z M1175.35-545.90L1311.09-545.90L1116.76 0L974.18 0L780.33-545.90L917.54-545.90L1044.00-140.14L1049.86-140.14L1175.35-545.90Z M1574.06 10.74L1574.06 10.74Q1492.03 10.74 1432.46-23.68Q1372.89-58.11 1340.91-121.09Q1308.93-184.08 1308.93-269.53L1308.93-269.53Q1308.93-354.00 1340.66-417.72Q1372.40-481.45 1430.02-517.09Q1487.64-552.73 1565.76-552.73L1565.76-552.73Q1616.05-552.73 1661.22-536.62Q1706.39-520.51 1741.30-486.82Q1776.21-453.13 1796.23-401.12Q1816.25-349.12 1816.25-277.34L1816.25-277.34L1816.25-237.30L1368.98-237.30L1368.98-323.73L1752.29-323.73L1692.23-298.34Q1692.23-344.73 1678.07-379.15Q1663.91-413.57 1636.07-433.11Q1608.24-452.64 1566.74-452.64L1566.74-452.64Q1525.23-452.64 1495.94-433.11Q1466.64-413.57 1451.50-380.62Q1436.37-347.66 1436.37-307.13L1436.37-307.13L1436.37-247.07Q1436.37-197.27 1453.70-161.87Q1471.04-126.46 1502.53-107.91Q1534.02-89.36 1576.02-89.36L1576.02-89.36Q1603.36-89.36 1626.06-97.17Q1648.77-104.98 1665.13-120.85Q1681.48-136.72 1690.27-160.16L1690.27-160.16L1810.39-146.00Q1798.67-98.63 1767.18-63.23Q1735.68-27.83 1686.61-8.54Q1637.54 10.74 1574.06 10.74Z" fill="currentColor"/><rect x="1888.2" y="-727.5" width="85.0" height="727.5" rx="42.5" style="fill: var(--teal)"/><rect x="2073.2" y="-727.5" width="85.0" height="727.5" rx="42.5" style="fill: var(--teal)"/></symbol></svg>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <header class="nav" data-nav>
+    <div class="wrap nav-inner">
+      <a class="brand" href="/" aria-label="Rivell home"><svg class="logo" viewBox="0 0 2158.2 773.4" aria-hidden="true" focusable="false"><use href="#rivell-logo"/></svg></a>
+      <nav class="nav-links" aria-label="Main">
+        <a class="hide-sm" href="/#how">How it works</a>
+        <a href="/technology/" aria-current="page">Technology</a>
+        <a class="nav-gh" href="https://github.com/Shridhar600/Rivell" aria-label="Rivell on GitHub"><svg class="gh-mark" width="20" height="20" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg><span class="hide-sm">GitHub</span></a>
+        <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to dark theme"><svg class="i-moon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.6 9.7A5.6 5.6 0 0 1 6.3 2.4a5.6 5.6 0 1 0 7.3 7.3Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><svg class="i-sun" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1v1.6M8 13.4V15M1 8h1.6M13.4 8H15M3.05 3.05l1.13 1.13M11.82 11.82l1.13 1.13M3.05 12.95l1.13-1.13M11.82 4.18l1.13-1.13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+        <a class="btn btn-primary nav-cta" href="/demo/">Try the demo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <section class="t-hero">
+      <div class="wrap">
+        <h1 class="display">How Rivell reviews a contract.</h1>
+        <p class="lead">Rivell is a hybrid of a System One decision model, a language model, hybrid search and plain code. Each part does the job it does best.</p>
+      </div>
+    </section>
+
+    <!-- The system -->
+    <section class="t-sec" id="system" style="padding-top:0">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 class="title reveal">Three engines share one knowledge base.</h2>
+          <p class="lead reveal">One engine turns your documents into positions, one judges contracts against them, and one writes the redline.</p>
+        </div>
+
+        <div class="sheet arch reveal" data-arch>
+          <svg viewBox="0 0 1240 580" role="group" aria-label="Rivell system diagram">
+            <defs>
+              <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0.5 7 4 0 7.5" fill="none" stroke="#9EA39C" stroke-width="1.3"/></marker>
+            </defs>
+
+            <rect class="band" x="20" y="420" width="1200" height="140" rx="18" fill="#F6F7F5" stroke="#E3E6E2"/>
+            <text class="band-k" x="44" y="452" font-family="Geist Mono, monospace" font-size="13" fill="#78807C">Shared intelligence</text>
+
+            <g>
+              <path class="edge is-flow" data-edge="e1" d="M220 82 H266" marker-end="url(#arr)"/>
+              <path class="edge is-flow" data-edge="e2" d="M490 82 H536" marker-end="url(#arr)"/>
+              <path class="edge is-flow" data-edge="e3" d="M710 82 H756" marker-end="url(#arr)"/>
+              <path class="edge is-flow" data-edge="e4" d="M870 124 V170 Q870 187 853 187 H397 Q380 187 380 204 V246" marker-end="url(#arr)"/>
+              <path class="edge is-flow" data-edge="e5" d="M220 292 H266" marker-end="url(#arr)"/>
+              <path class="edge is-flow" data-edge="e6" d="M490 292 H536" marker-end="url(#arr)"/>
+              <path class="edge is-flow" data-edge="e7" d="M710 292 H756" marker-end="url(#arr)"/>
+              <path class="edge is-flow" data-edge="e8" d="M980 292 H1016" marker-end="url(#arr)"/>
+              <path class="edge is-aux" data-edge="ak" d="M290 124 V160 Q290 176 274 176 H261 Q245 176 245 192 V420"/>
+              <path class="edge is-aux" data-edge="ar" d="M380 334 V420"/>
+              <path class="edge is-aux" data-edge="ad" d="M870 334 V420"/>
+            </g>
+
+            <g class="packets" aria-hidden="true">
+              <path id="pk" d="M120 82 H870 V170 Q870 187 853 187 H397 Q380 187 380 204 V292" fill="none"/>
+              <path id="pr" d="M120 292 H1120" fill="none"/>
+              <circle class="packet" r="4" visibility="hidden"><animateMotion id="pm1" dur="5s" begin="indefinite"><mpath href="#pk"/></animateMotion><set attributeName="visibility" to="visible" begin="pm1.begin" end="pm1.end"/></circle>
+              <circle class="packet" r="4" visibility="hidden"><animateMotion id="pm2" dur="5s" begin="indefinite"><mpath href="#pk"/></animateMotion><set attributeName="visibility" to="visible" begin="pm2.begin" end="pm2.end"/></circle>
+              <circle class="packet" r="4" visibility="hidden"><animateMotion id="pm3" dur="5s" begin="indefinite"><mpath href="#pr"/></animateMotion><set attributeName="visibility" to="visible" begin="pm3.begin" end="pm3.end"/></circle>
+              <circle class="packet" r="4" visibility="hidden"><animateMotion id="pm4" dur="5s" begin="indefinite"><mpath href="#pr"/></animateMotion><set attributeName="visibility" to="visible" begin="pm4.begin" end="pm4.end"/></circle>
+            </g>
+
+            <g font-family="Geist, sans-serif">
+              <g class="node n-std" data-node="k-in" tabindex="0" role="button" aria-label="Your knowledge">
+                <rect class="box" x="20" y="40" width="200" height="84" rx="14" fill="#fff" stroke="#D0D5CF"/>
+                <text x="40" y="76" font-size="17" font-weight="600" fill="#121715">Your knowledge</text>
+                <text x="40" y="99" font-size="13" fill="#78807C">Playbooks, clause libraries</text>
+              </g>
+              <g class="node n-eng" data-node="k-eng" tabindex="0" role="button" aria-label="Knowledge engine">
+                <rect class="box" x="270" y="40" width="220" height="84" rx="14" fill="#121715" stroke="#121715"/>
+                <text x="290" y="76" font-size="17" font-weight="600" fill="#fff">Knowledge engine</text>
+                <text x="290" y="99" font-size="13" fill="#9AA49F">Documents into positions</text>
+              </g>
+              <g class="node n-you" data-node="k-you" tabindex="0" role="button" aria-label="You approve">
+                <rect class="box" x="540" y="40" width="170" height="84" rx="14" fill="#FCF1DE" stroke="#B45309" stroke-dasharray="4 4"/>
+                <text x="560" y="76" font-size="17" font-weight="600" fill="#7A3B06">You approve</text>
+                <text x="560" y="99" font-size="13" fill="#9A5B1E">Every entry</text>
+              </g>
+              <g class="node n-std" data-node="k-pub" tabindex="0" role="button" aria-label="Published knowledge">
+                <rect class="box" x="760" y="40" width="220" height="84" rx="14" fill="#fff" stroke="#D0D5CF"/>
+                <text x="780" y="76" font-size="17" font-weight="600" fill="#121715">Published knowledge</text>
+                <text x="780" y="99" font-size="13" fill="#78807C">Versioned</text>
+              </g>
+
+              <g class="node n-std" data-node="r-in" tabindex="0" role="button" aria-label="Incoming contract">
+                <rect class="box" x="20" y="250" width="200" height="84" rx="14" fill="#fff" stroke="#D0D5CF"/>
+                <text x="40" y="286" font-size="17" font-weight="600" fill="#121715">Incoming contract</text>
+                <text x="40" y="309" font-size="13" fill="#78807C">Word document</text>
+              </g>
+              <g class="node n-eng" data-node="r-eng" tabindex="0" role="button" aria-label="Review engine">
+                <rect class="box" x="270" y="250" width="220" height="84" rx="14" fill="#121715" stroke="#121715"/>
+                <text x="290" y="286" font-size="17" font-weight="600" fill="#fff">Review engine</text>
+                <text x="290" y="309" font-size="13" fill="#9AA49F">Clauses into findings</text>
+              </g>
+              <g class="node n-you" data-node="r-you" tabindex="0" role="button" aria-label="You decide">
+                <rect class="box" x="540" y="250" width="170" height="84" rx="14" fill="#FCF1DE" stroke="#B45309" stroke-dasharray="4 4"/>
+                <text x="560" y="286" font-size="17" font-weight="600" fill="#7A3B06">You decide</text>
+                <text x="560" y="309" font-size="13" fill="#9A5B1E">Every finding</text>
+              </g>
+              <g class="node n-eng" data-node="r-red" tabindex="0" role="button" aria-label="Redline engine">
+                <rect class="box" x="760" y="250" width="220" height="84" rx="14" fill="#121715" stroke="#121715"/>
+                <text x="780" y="286" font-size="17" font-weight="600" fill="#fff">Redline engine</text>
+                <text x="780" y="309" font-size="13" fill="#9AA49F">Decisions into changes</text>
+              </g>
+              <g class="node n-out" data-node="r-out" tabindex="0" role="button" aria-label="Redlined Word file">
+                <rect class="box" x="1020" y="250" width="200" height="84" rx="14" fill="#fff" stroke="#0F766E" stroke-width="1.5"/>
+                <text x="1040" y="286" font-size="17" font-weight="600" fill="#0B5F58">Redlined file</text>
+                <text x="1040" y="309" font-size="13" fill="#78807C">Checked change by change</text>
+              </g>
+
+              <g class="node n-mind" data-node="rules" tabindex="0" role="button" aria-label="Rules">
+                <rect class="box" x="44" y="472" width="270" height="64" rx="12" fill="#fff" stroke="#E3E6E2"/>
+                <text x="64" y="500" font-size="16" font-weight="600" fill="#121715">Rules</text>
+                <text x="64" y="520" font-size="13" fill="#78807C">Plain code</text>
+              </g>
+              <g class="node n-mind" data-node="jev" tabindex="0" role="button" aria-label="Jev, System One decision model">
+                <rect class="box" x="338" y="472" width="270" height="64" rx="12" fill="#fff" stroke="#E3E6E2"/>
+                <text x="358" y="500" font-size="16" font-weight="600" fill="#121715">Jev</text>
+                <text x="358" y="520" font-size="13" fill="#78807C">System One decision model</text>
+              </g>
+              <g class="node n-mind" data-node="lm" tabindex="0" role="button" aria-label="Language model">
+                <rect class="box" x="632" y="472" width="270" height="64" rx="12" fill="#fff" stroke="#E3E6E2"/>
+                <text x="652" y="500" font-size="16" font-weight="600" fill="#121715">Language model</text>
+                <text x="652" y="520" font-size="13" fill="#78807C">Open language</text>
+              </g>
+              <g class="node n-mind" data-node="search" tabindex="0" role="button" aria-label="Hybrid search">
+                <rect class="box" x="926" y="472" width="270" height="64" rx="12" fill="#fff" stroke="#E3E6E2"/>
+                <text x="946" y="500" font-size="16" font-weight="600" fill="#121715">Hybrid search</text>
+                <text x="946" y="520" font-size="13" fill="#78807C">Words and meaning</text>
+              </g>
+            </g>
+          </svg>
+
+          <div class="arch-panel" aria-live="polite" data-arch-panel>
+            <p class="k">Start here</p>
+            <div>
+              <h4>Select any part of the system.</h4>
+              <p>Dark boxes are the engines. Dashed boxes are where a person decides. The band below holds the four kinds of intelligence the engines share.</p>
+            </div>
+          </div>
+        </div>
+
+        <ul class="arch-list" data-arch-list>
+          <li class="sheet" data-for="k-in"><p class="k">Input</p><h4>Your knowledge</h4><p>The playbooks, clause libraries, templates and past deals your team already keeps, in Word or Excel.</p></li>
+          <li class="sheet" data-for="k-eng"><p class="k">Engine</p><h4>Knowledge engine</h4><p>Reads each document with its headings, tables and rows intact. Sorts every entry by topic and role: preferred, fallback, walk-away or escalation. Flags entries that duplicate or contradict what is already published.</p></li>
+          <li class="sheet" data-for="k-you"><p class="k">You</p><h4>You approve every entry</h4><p>Nothing reaches a review until a person has checked it against its source and published it.</p></li>
+          <li class="sheet" data-for="k-pub"><p class="k">Store</p><h4>Published knowledge</h4><p>Versioned. Every review records the exact version it used, so a past review can always be explained.</p></li>
+          <li class="sheet" data-for="r-in"><p class="k">Input</p><h4>Incoming contract</h4><p>A Word document on either side's paper, including one that already carries the other side's tracked changes and comments.</p></li>
+          <li class="sheet" data-for="r-eng"><p class="k">Engine</p><h4>Review engine</h4><p>Reads the contract's structure, parties and your side. Gathers the positions that apply, judges each clause, checks across clauses, and turns the results into findings with a fixed severity.</p></li>
+          <li class="sheet" data-for="r-you"><p class="k">You</p><h4>You decide every finding</h4><p>Accept, edit, keep as drafted, dismiss or escalate. You can also add a finding Rivell did not raise.</p></li>
+          <li class="sheet" data-for="r-red"><p class="k">Engine</p><h4>Redline engine</h4><p>Turns each decision into an exact replace, insert or delete on the original document, written as a tracked change.</p></li>
+          <li class="sheet" data-for="r-out"><p class="k">Output</p><h4>Redlined Word file</h4><p>Read back after it is written. Each change is checked against what you approved before the file is offered for download.</p></li>
+          <li class="sheet" data-for="rules"><p class="k">Intelligence</p><h4>Rules</h4><p>Plain code owns structure, the order of authority, severity and the final check of the file. Used by all three engines. The same input always gives the same answer.</p></li>
+          <li class="sheet" data-for="jev"><p class="k">Intelligence</p><h4>Jev, a System One decision model by TypeSafe</h4><p>Answers bounded questions about each entry and each clause, and reports how likely every answer is. Used by the knowledge and review engines.</p></li>
+          <li class="sheet" data-for="lm"><p class="k">Intelligence</p><h4>Language model</h4><p>Reads free-form text into fields, drafts wording when your library has none, and gives a second opinion on close calls. Used by the knowledge and review engines.</p></li>
+          <li class="sheet" data-for="search"><p class="k">Intelligence</p><h4>Hybrid search</h4><p>Full-text search and meaning-based search, ranked together, to find the positions a clause touches in different words. Used by the review engine.</p></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- One clause -->
+    <section class="t-sec" id="journey">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 class="title reveal">Follow one clause through the engine.</h2>
+          <p class="lead reveal">Scroll through the seven steps, or select one.</p>
+        </div>
+
+        <div class="j-track" data-j-track>
+        <div class="j-pin" data-j-pin>
+        <div class="journey" data-journey>
+          <div class="j-visual">
+            <div class="sheet j-clause">
+              <p class="ui-k"><span>Kestrel Assurance · Master Services Agreement</span><span>Clause 12.2</span></p>
+              <p>Each party's aggregate liability under this Agreement shall not exceed three times the annual Fees.</p>
+            </div>
+
+            <div class="j-screen">
+              <div class="sheet j-panel is-active" data-panel="0">
+                <span class="ui-k">What Rivell knows</span>
+                <div class="lanes">
+                  <div class="lane"><span><b>Topic</b><small>Liability cap</small></span><span class="use">From the clause</span></div>
+                  <div class="lane"><span><b>Your side</b><small>Supplier: Bramber Software</small></span><span class="use">From the contract</span></div>
+                  <div class="lane"><span><b>Agreement type</b><small>Master services agreement</small></span><span class="use">From the contract</span></div>
+                  <div class="lane"><span><b>Defined terms</b><small>"Fees", "Agreement"</small></span><span class="use">From clause 1</span></div>
+                </div>
+              </div>
+
+              <div class="sheet j-panel" data-panel="1">
+                <span class="ui-k">Evidence, in order of authority</span>
+                <div class="lanes">
+                  <div class="lane is-top"><span><b>Your playbook</b><small>Liability cap, Commercial Contracts Playbook v4.2</small></span><span class="use">Decides</span></div>
+                  <div class="lane"><span><b>Your clause library</b><small>Approved liability cap wording</small></span><span class="use">Supplies wording</span></div>
+                  <div class="lane is-mute"><span><b>Past deals</b><small>Similar clauses you signed before</small></span><span class="use">Context only</span></div>
+                  <div class="lane is-mute"><span><b>This contract</b><small>Definitions and cross-references</small></span><span class="use">Context only</span></div>
+                </div>
+              </div>
+
+              <div class="sheet j-panel" data-panel="2">
+                <span class="ui-k">Jev's answer for the liability cap position</span>
+                <div class="bars">
+                  <div class="bar"><span>Meets preferred</span><span class="track"><span class="fill" data-w="3"></span></span><span class="v">0.03</span></div>
+                  <div class="bar"><span>Within fallback</span><span class="track"><span class="fill" data-w="6"></span></span><span class="v">0.06</span></div>
+                  <div class="bar"><span>Beyond fallback</span><span class="track"><span class="fill" data-w="17"></span></span><span class="v">0.17</span></div>
+                  <div class="bar is-top"><span>Walk-away</span><span class="track"><span class="fill" data-w="72"></span></span><span class="v">0.72</span></div>
+                  <div class="bar"><span>Unclear</span><span class="track"><span class="fill" data-w="2"></span></span><span class="v">0.02</span></div>
+                </div>
+                <p class="illus">Illustrative values for one question.</p>
+              </div>
+
+              <div class="sheet j-panel" data-panel="3">
+                <span class="ui-k">Where the answer goes</span>
+                <div class="route">
+                  <div class="route-row is-taken"><span class="a">Clear answer<small>Most of the weight on one side</small></span><span class="arr">→</span><span class="b">Finding<small>Walk-away, high severity</small></span></div>
+                  <div class="route-row"><span class="a">Close call<small>Weight split between answers</small></span><span class="arr">→</span><span class="b">Second opinion<small>From the language model</small></span></div>
+                  <div class="route-row"><span class="a">Opinions disagree<small>After the second look</small></span><span class="arr">→</span><span class="b">Needs your look<small>Never guessed</small></span></div>
+                </div>
+              </div>
+
+              <div class="sheet j-panel" data-panel="4">
+                <span class="ui-k">Does your approved wording fit?</span>
+                <div class="fit">
+                  <div class="fit-q"><span>It meets the liability cap position</span><span class="ans"><span class="ui-tick"></span>Yes</span></div>
+                  <div class="fit-q"><span>It fixes the gap in clause 12.2</span><span class="ans"><span class="ui-tick"></span>Yes</span></div>
+                </div>
+                <p class="fd-sugg" style="margin-top:16px"><ins class="tc">the Fees paid or payable in the 12 months before the claim</ins></p>
+                <p class="fd-src">Approved organizational drafting · Clause library</p>
+              </div>
+
+              <div class="sheet j-panel" data-panel="5">
+                <span class="ui-k">Your decision</span>
+                <p class="fd-title" style="margin-top:0">Liability cap is above your limit</p>
+                <p class="fd-text" style="margin:8px 0 14px">The clause allows three times the annual fees. Your playbook walks away above two times.</p>
+                <p class="fd-approve"><span class="ui-dot"></span>Any increase needs Marcus Feld and Priya Raghavan</p>
+                <div class="fd-acts" style="margin-top:14px"><span class="ui-btn is-done">Accepted</span><span class="ui-btn">Edit</span><span class="ui-btn">Keep as drafted</span><span class="ui-btn">Escalate</span></div>
+              </div>
+
+              <div class="sheet j-panel" data-panel="6">
+                <span class="ui-k">Kestrel MSA - Bramber redline.docx</span>
+                <p class="fd-sugg">12.2 Each party's aggregate liability under this Agreement shall not exceed <del class="tc">three times the annual Fees</del> <ins class="tc">the Fees paid or payable in the 12 months before the claim</ins>.</p>
+                <div style="margin-top:18px"><span class="verified"><span class="ui-tick"></span>Verified · matches your decision</span></div>
+              </div>
+            </div>
+            <div class="j-caption" data-j-caption></div>
+            <div class="j-nav">
+              <button type="button" data-j="prev" aria-label="Previous step"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13 8H4m4-4L4 8l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button type="button" data-j="next" aria-label="Next step"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h9m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            </div>
+          </div>
+
+          <div>
+            <ol class="j-steps">
+              <li class="j-step is-active"><button type="button" aria-expanded="true"><span class="n" aria-hidden="true"></span><span class="h">Read</span></button><div class="d"><p>Rivell finds the clause in the document's structure and places it under a topic: liability cap. It already knows your side of the deal. You are the supplier.</p></div></li>
+              <li class="j-step"><button type="button" aria-expanded="false"><span class="n" aria-hidden="true"></span><span class="h">Gather</span></button><div class="d"><p>It collects what applies, in order of authority: your playbook position first, then approved wording, then similar clauses from past deals. Search can surface a source. It can never promote one.</p></div></li>
+              <li class="j-step"><button type="button" aria-expanded="false"><span class="n" aria-hidden="true"></span><span class="h">Judge</span></button><div class="d"><p>Jev compares the clause with every position that applies, in a single call. It does not write an essay. It picks an answer and says how likely each option is.</p></div></li>
+              <li class="j-step"><button type="button" aria-expanded="false"><span class="n" aria-hidden="true"></span><span class="h">Route</span></button><div class="d"><p>Rules read the spread. A clear answer becomes a finding. A close call goes to the language model for a second opinion. If the two disagree, the clause is marked for your look.</p></div></li>
+              <li class="j-step"><button type="button" aria-expanded="false"><span class="n" aria-hidden="true"></span><span class="h">Suggest</span></button><div class="d"><p>Rivell checks whether your approved wording meets the position and fixes this gap. Here it does. When nothing fits, Rivell drafts new wording and labels it as drafted.</p></div></li>
+              <li class="j-step"><button type="button" aria-expanded="false"><span class="n" aria-hidden="true"></span><span class="h">Decide</span></button><div class="d"><p>You see the gap, the wording and who must approve. Accept, edit, keep the clause, or escalate it.</p></div></li>
+              <li class="j-step"><button type="button" aria-expanded="false"><span class="n" aria-hidden="true"></span><span class="h">Write and check</span></button><div class="d"><p>Your accepted change becomes a tracked change in the original Word file. Rivell reads the file back and confirms the change is exactly what you approved.</p></div></li>
+            </ol>
+          </div>
+        </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Division of labour -->
+    <section class="t-sec" id="parts">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 class="title reveal">What each part does.</h2>
+        </div>
+        <div class="roles">
+          <div class="role reveal">
+            <div><h3>Rules</h3><p class="sub">Plain code</p></div>
+            <p>Owns the document structure, which source outranks which, how severe a finding is, and the final check of the Word file. Legal work needs the same answer for the same input, so severity never depends on how confident a model feels.</p>
+          </div>
+          <div class="role reveal">
+            <div><h3>Jev</h3><p class="sub">System One decision model by TypeSafe</p></div>
+            <p>Answers bounded questions: yes or no, choose one, rate. All of a clause's questions go out in one call, and every answer carries a likelihood. The judgments are fast and consistent, and the likelihoods give code a measure of doubt to act on.</p>
+          </div>
+          <div class="role reveal">
+            <div><h3>Language model</h3><p class="sub">Your choice of provider</p></div>
+            <p>Reads free-form playbook text into fields, drafts wording when your library has none, gives second opinions on close calls, and reads the whole contract for issues your playbook does not cover. Some questions need language, not a choice.</p>
+          </div>
+          <div class="role reveal">
+            <div><h3>Hybrid search</h3><p class="sub">Full text and meaning</p></div>
+            <p>Runs keyword search and meaning-based search side by side, then merges their rankings into one list. Keywords miss a paraphrase and meaning alone misses an exact term, so together they find the position a clause touches.</p>
+          </div>
+          <div class="role is-you reveal">
+            <div><h3>You</h3><p class="sub">The final word</p></div>
+            <p>You approve the knowledge, decide every finding, and add what Rivell missed. Rivell assists. A lawyer signs off.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- System One -->
+    <section class="t-sec" id="system-one">
+      <div class="wrap">
+        <div class="split">
+          <div class="section-head" style="margin-bottom:0">
+            <h2 class="title reveal">Why a decision model sits at the centre.</h2>
+          </div>
+          <div class="reveal">
+            <p class="body">Most AI tools ask a language model to write an answer, then read a decision out of its prose. Rivell asks most of its questions of a System One decision model instead.</p>
+            <p class="body">TypeSafe borrowed the name from System 1 in psychology, the fast and intuitive mode of thinking. The model answers many structured questions at once and gives a likelihood for every option, so rules can act on its doubt.</p>
+          </div>
+        </div>
+
+        <div class="contrast">
+          <div class="sheet reveal">
+            <span class="ui-k">Ask for prose</span>
+            <p class="q">Is clause 12.2 acceptable under our liability cap position?</p>
+            <p class="prose">The clause appears to set a cap that is higher than many suppliers would accept, although this may be reasonable depending on the value of the contract and the wider commercial context. You may wish to consider...</p>
+            <p class="verdict-line">Hard to act on. <b>No clear answer, no measure of doubt.</b></p>
+          </div>
+          <div class="sheet reveal">
+            <span class="ui-k">Ask for a decision</span>
+            <p class="q">Where does clause 12.2 fall against the liability cap position?</p>
+            <div class="bars" data-bars-static>
+              <div class="bar"><span>Meets preferred</span><span class="track"><span class="fill" data-w="3"></span></span><span class="v">0.03</span></div>
+              <div class="bar"><span>Within fallback</span><span class="track"><span class="fill" data-w="6"></span></span><span class="v">0.06</span></div>
+              <div class="bar"><span>Beyond fallback</span><span class="track"><span class="fill" data-w="17"></span></span><span class="v">0.17</span></div>
+              <div class="bar is-top"><span>Walk-away</span><span class="track"><span class="fill" data-w="72"></span></span><span class="v">0.72</span></div>
+            </div>
+            <p class="verdict-line">Ready for rules. <b>A clear answer, and how sure it is.</b> Illustrative values.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Authority -->
+    <section class="t-sec" id="authority">
+      <div class="wrap">
+        <div class="section-head is-center" style="margin-bottom:0">
+          <h2 class="title reveal">Authority comes before similarity.</h2>
+          <p class="lead reveal">Search finds clauses that look alike, but it cannot know which ones your team agreed to. Every source has a fixed rank, so a close match can inform a finding but never override your playbook.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Checks -->
+    <section class="t-sec" id="checks">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 class="title reveal">Built to be checked.</h2>
+        </div>
+        <div class="checks">
+          <div class="check reveal">
+            <h3>Reviews can be traced</h3>
+            <p>A review records the knowledge version, the review pack and the engine version it used, so you can always see why it said what it said.</p>
+          </div>
+          <div class="check reveal">
+            <h3>Changes are read back and checked</h3>
+            <p>After it writes tracked changes, Rivell reads the Word file back and checks each one. A change it cannot place exactly is reported, never guessed.</p>
+          </div>
+          <div class="check reveal">
+            <h3>Releases are measured before they ship</h3>
+            <p>Engine changes are tested on contracts kept apart from development, and compared with a plain language-model baseline before they ship.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stack -->
+    <section class="t-sec" id="stack">
+      <div class="wrap">
+        <div class="section-head">
+          <h2 class="title reveal">What Rivell is built with.</h2>
+          <p class="lead reveal">Self-hosted. Contracts and knowledge stay in your own database. Clause text goes only to the model providers you configure.</p>
+        </div>
+        <ul class="stack reveal">
+          <li>Java 21 and Spring Boot<span>Engines and API</span></li>
+          <li>PostgreSQL with pgvector<span>Storage and meaning-based search</span></li>
+          <li>React and TypeScript<span>The workbench</span></li>
+          <li>docx4j and Apache POI<span>Reading and writing Word and Excel</span></li>
+          <li>Jev by TypeSafe<span>System One decisions</span></li>
+          <li>A language model of your choice<span>Open language</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="closing">
+      <div class="wrap">
+        <div class="closing-card reveal">
+          <div>
+            <h2 class="title">See it on a real contract.</h2>
+            <p>The demo follows a fictional software company through five contracts, from the first read to a checked redline. No sign-up needed.</p>
+          </div>
+          <div class="acts">
+            <a class="btn btn-primary" href="/demo/">Try the demo <svg class="arrow" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h9m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+            <a class="btn btn-ghost" href="https://github.com/Shridhar600/Rivell">View the source</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap">
+      <div class="foot-row">
+        <a class="foot-brand" href="/" aria-label="Rivell home"><svg class="logo" viewBox="0 0 2158.2 773.4" aria-hidden="true" focusable="false"><use href="#rivell-logo"/></svg></a>
+        <nav class="foot-links" aria-label="Footer">
+          <a href="/#how">How it works</a>
+          <a href="/technology/">Technology</a>
+          <a href="/demo/">Demo</a>
+          <a href="https://github.com/Shridhar600/Rivell">GitHub</a>
+          <a href="https://shridharvijay.com">Shridhar Vijay</a>
+        </nav>
+      </div>
+      <div class="foot-base">
+        <span>© 2026 Shridhar Vijay. Open source under the Apache 2.0 licence.</span>
+        <span>Rivell assists legal review. It does not give legal advice.</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/assets/js/site.js" defer></script>
+  <script src="/assets/js/technology.js" defer></script>
+</body>
+</html>
