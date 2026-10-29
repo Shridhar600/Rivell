@@ -72,9 +72,10 @@ The product website lives in `site/` (static files, Cloudflare Pages). To publis
 scripts/demo/build-site.sh   # builds the demo into site/demo/ (git-ignored)
 ```
 
-Then deploy the whole `site/` directory. `site/_redirects` sends the demo's own routes to
-`/demo/index.html` and leaves its assets alone, and `site/_headers` keeps `/demo/` out of
-search indexes.
+Then deploy the whole `site/` directory. The script also writes `site/demo/404.html`, a copy
+of the demo page: Pages serves the nearest `404.html` for an unknown path, so a deep link or a
+refresh inside the demo still opens the right screen. `site/_headers` and the page's robots
+meta keep `/demo/` out of search indexes.
 
 ## What the seed does
 

@@ -1,7 +1,3 @@
-# The demo is a single-page app under /demo/. Only its routes fall back to its index page;
-# Pages applies redirects even when a file matches, so a catch-all would hide the demo's assets.
+# Deep links inside the demo need no rewrite: the demo build ships site/demo/404.html (a copy of
+# its page), and Pages serves the nearest 404.html, which boots the demo on that route.
 /demo /demo/ 301
-/demo/reviews /demo/index.html 200
-/demo/reviews/* /demo/index.html 200
-/demo/knowledge /demo/index.html 200
-/demo/knowledge/* /demo/index.html 200
