@@ -6,12 +6,6 @@
   X-Frame-Options: DENY
   Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-2tlRViFPFSEJVCaVc0iDmjYNEOTfUVOYBvAvyAFJcBI=' 'sha256-rhsiHABDLHz/SIkOQgLAVArn6B5rsatBzBz9Hmixfwc=' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; upgrade-insecure-requests
 
-https://:project.pages.dev/*
-  X-Robots-Tag: noindex
-
-https://:version.:project.pages.dev/*
-  X-Robots-Tag: noindex
-
 /demo/*
   X-Robots-Tag: noindex
 

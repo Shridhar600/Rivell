@@ -78,3 +78,4 @@ var/
 
 # Built by scripts/demo/build-site.sh
 /site/demo/
+/.wrangler/

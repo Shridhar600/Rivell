@@ -1,0 +1,17 @@
+// The website in site/, with the demo in site/demo/, served as static files by Cloudflare.
+// Build with scripts/demo/build-site.sh, then deploy with: npx wrangler@4.151.3 deploy
+{
+  "name": "rivell-site",
+  "compatibility_date": "2026-10-20",
+  "assets": {
+    "directory": "./site",
+    // An unknown path gets the nearest 404.html; site/demo/404.html is the demo page itself,
+    // so a deep link or a refresh inside the demo still opens the demo.
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  },
+  // Served only on the custom domain: no workers.dev address and no version URLs to index.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "rivell.shridharvijay.com", "custom_domain": true }]
+}
