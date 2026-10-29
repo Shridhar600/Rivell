@@ -75,3 +75,6 @@ var/
 
 # Demo tape recording (the packed .jsonl.gz is committed)
 /demo/recordings/*.jsonl
+
+# Built by scripts/demo/build-site.sh
+/site/demo/

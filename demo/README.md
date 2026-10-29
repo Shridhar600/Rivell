@@ -64,6 +64,18 @@ npm run check:no-demo
 a `demo-data` path. The demo transport and chrome live in `frontend/src/demo/`; the
 `@demo-hooks` alias selects `install.ts` only in demo mode and `off.ts` otherwise.
 
+## The website with the demo
+
+The product website lives in `site/` (static files, Cloudflare Pages). To publish the demo with it:
+
+```bash
+scripts/demo/build-site.sh   # builds the demo into site/demo/ (git-ignored)
+```
+
+Then deploy the whole `site/` directory. `site/_redirects` sends the demo's own routes to
+`/demo/index.html` and leaves its assets alone, and `site/_headers` keeps `/demo/` out of
+search indexes.
+
 ## What the seed does
 
 It starts a fresh PostgreSQL container, starts `scripts/demo/tape.py` in replay mode on

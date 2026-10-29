@@ -1,2 +1,7 @@
+# The demo is a single-page app under /demo/. Only its routes fall back to its index page;
+# Pages applies redirects even when a file matches, so a catch-all would hide the demo's assets.
 /demo /demo/ 301
-/demo/* /demo/index.html 200
+/demo/reviews /demo/index.html 200
+/demo/reviews/* /demo/index.html 200
+/demo/knowledge /demo/index.html 200
+/demo/knowledge/* /demo/index.html 200
