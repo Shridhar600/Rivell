@@ -3,11 +3,10 @@
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   window.rivellReduceMotion = reduce;
 
-  // Theme: follows the system until the visitor picks one; the choice is remembered.
+  // Theme: light unless the visitor picks dark; the choice is remembered.
   var root = document.documentElement;
   var toggle = document.querySelector('[data-theme-toggle]');
-  var darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
-  var current = function () { return root.getAttribute('data-theme') || (darkQuery.matches ? 'dark' : 'light'); };
+  var current = function () { return root.getAttribute('data-theme') || 'light'; };
   var label = function () {
     if (toggle) toggle.setAttribute('aria-label', current() === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
   };
@@ -18,7 +17,6 @@
       try { localStorage.setItem('rivell-theme', next); } catch (e) {}
       label();
     });
-    if (darkQuery.addEventListener) darkQuery.addEventListener('change', label);
     label();
   }
 
