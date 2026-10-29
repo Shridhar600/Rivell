@@ -21,6 +21,10 @@ export interface GuideInput {
 export const PREPARED_RESULT_NOTICE =
   'This redline was prepared in advance. It does not include changes you make in the demo.'
 
+/** Shown once the NDA review is finalized: the change set and redline come from the recorded review. */
+export const PREPARED_REVIEW_NOTICE =
+  'This result was prepared in advance from a recorded review. It does not include changes you make in the demo.'
+
 function workspacePath(ids: { contractId: string; reviewId: string }): string {
   return `/reviews/${ids.contractId}/analysis/${ids.reviewId}`
 }
@@ -54,27 +58,27 @@ function c5Step(input: GuideInput, where: 'workspace' | 'lifecycle'): GuideStep 
       if (where === 'lifecycle') {
         return {
           title: 'Finalize the review',
-          text: 'Every finding is decided. Finalize in the workspace to freeze the approved changes.',
+          text: 'Every finding is decided. Finalize it in the workspace.',
           link: { label: 'Open the review', to: workspacePath(ids) },
         }
       }
       return {
         title: 'Finalize the review',
-        text: 'Every finding is decided. Finalize to freeze the approved changes.',
+        text: 'Every finding is decided. Finalize the review to see the prepared result.',
       }
     case 'tour-c5-finalized':
       if (where === 'workspace') {
         return {
           title: 'Produce the redline',
-          text: 'The approved changes are frozen. The lifecycle page produces and checks the redline.',
+          text: 'The review is finalized with the prepared result. The lifecycle page produces and checks the redline.',
           link: { label: 'Open the lifecycle', to: lifecyclePath(ids) },
-          note: PREPARED_RESULT_NOTICE,
+          note: PREPARED_REVIEW_NOTICE,
         }
       }
       return {
         title: 'Produce the redline',
         text: 'Produce the redline, then download it. Rivell checks it against the original before you get it.',
-        note: PREPARED_RESULT_NOTICE,
+        note: PREPARED_REVIEW_NOTICE,
       }
     case 'tour-c5-done':
       if (where === 'workspace') {
@@ -229,7 +233,7 @@ export function guideFor(input: GuideInput): GuideStep {
       title: 'Produce the redline',
       text: 'Open the NDA lifecycle page to produce and download the redline.',
       link: { label: 'Open the lifecycle', to: lifecyclePath(ids.c5) },
-      note: PREPARED_RESULT_NOTICE,
+      note: PREPARED_REVIEW_NOTICE,
     }
   }
 

@@ -20,6 +20,8 @@ const XLSX_MEDIA_TYPE =
 const PREPARED_FILE_ERROR = 'The prepared playbook could not be loaded.'
 const DOWNLOAD_NOTICE =
   'This redline was prepared in advance. It does not include changes you make in the demo.'
+const FINALIZE_NOTICE =
+  'This result was prepared in advance from a recorded review. It does not include changes you make in the demo.'
 
 function appHref(path: string): string {
   const base = import.meta.env.BASE_URL.replace(/\/$/, '')
@@ -240,13 +242,10 @@ export function DemoChrome() {
       if (downloadTimer.current !== null) window.clearTimeout(downloadTimer.current)
       downloadTimer.current = window.setTimeout(() => setDownload(null), 6000)
     }
-    // The guide carries the prepared-result sentence, but a visitor can hide it. The finalized
-    // event makes the same sentence visible even then, on any route.
+    // Finalize returns the recorded change set, not one built from the visitor's decisions, so
+    // the visitor is told at that moment, whether or not the guide is open.
     const onFinalized = () => {
-      // When the guide is visible it carries the same sentence. The notice is the fallback for
-      // the visitor who collapsed it, so they still learn the result was prepared in advance.
-      if (!getDemoState().guideHidden) return
-      setDownload(DOWNLOAD_NOTICE)
+      setDownload(FINALIZE_NOTICE)
       if (downloadTimer.current !== null) window.clearTimeout(downloadTimer.current)
       downloadTimer.current = window.setTimeout(() => setDownload(null), 8000)
     }

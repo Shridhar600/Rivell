@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { guideFor, PREPARED_RESULT_NOTICE } from './guide'
+import { guideFor, PREPARED_RESULT_NOTICE, PREPARED_REVIEW_NOTICE } from './guide'
 import type { DemoIds } from './transport'
 
 const ids: DemoIds = {
@@ -51,7 +51,7 @@ describe('demo guide', () => {
     expect(guide('/reviews/c5/analysis/r5', 'tour-c5-finalized').link)
       .toEqual({ label: 'Open the lifecycle', to: '/reviews/c5/overview/r5' })
     expect(guide('/reviews/c5/analysis/r5', 'tour-c5-finalized').note)
-      .toBe(PREPARED_RESULT_NOTICE)
+      .toBe(PREPARED_REVIEW_NOTICE)
   })
 
   it('gives the lifecycle the redline and download steps', () => {
@@ -66,7 +66,7 @@ describe('demo guide', () => {
   it('closes the tour away from the NDA', () => {
     expect(guide('/', 'tour-c5-done').title).toBe('That is the tour')
     expect(guide('/', 'tour-c5-done').note).toBe(PREPARED_RESULT_NOTICE)
-    expect(guide('/', 'tour-c5-finalized').note).toBe(PREPARED_RESULT_NOTICE)
+    expect(guide('/', 'tour-c5-finalized').note).toBe(PREPARED_REVIEW_NOTICE)
   })
 
   it('hints at the other stages when the visitor roams', () => {

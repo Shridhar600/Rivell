@@ -37,6 +37,13 @@ function demoCapturePlugin(base: string): Plugin {
   const prefix = `${base}demo-data/`
   return {
     name: 'rivell-demo-capture',
+    // The demo page stays out of search indexes even when it is served through a rewrite, and
+    // shows a line of text while the capture loads.
+    transformIndexHtml(html) {
+      return html
+        .replace('</head>', '    <meta name="robots" content="noindex">\n  </head>')
+        .replace('<div id="root"></div>', '<div id="root"><p style="font: 15px/1.5 system-ui, sans-serif; color: #5b6360; padding: 32px;">Loading the demo</p></div>')
+    },
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
         const url = request.url ?? ''
