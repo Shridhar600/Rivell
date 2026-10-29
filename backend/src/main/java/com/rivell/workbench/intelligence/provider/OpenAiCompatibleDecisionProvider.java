@@ -11,6 +11,7 @@ import org.springframework.web.client.RestClientResponseException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.rivell.workbench.intelligence.ChoiceAnswer;
 import com.rivell.workbench.intelligence.ChoiceQuestion;
@@ -48,6 +49,7 @@ public final class OpenAiCompatibleDecisionProvider implements SemanticDecisionP
 
     private final OpenAiCompatibleGenerativeProvider.RestClientAccessor restClient;
     private final ObjectMapper objectMapper;
+    private final ObjectMapper stateMapper;
     private final GenerativeProperties properties;
     private final com.rivell.workbench.intelligence.ProviderCreditGuard creditGuard;
 
@@ -65,6 +67,8 @@ public final class OpenAiCompatibleDecisionProvider implements SemanticDecisionP
             com.rivell.workbench.intelligence.ProviderCreditGuard creditGuard) {
         this.restClient = restClient;
         this.objectMapper = objectMapper;
+        this.stateMapper = objectMapper.copy()
+                .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
         this.properties = properties;
         this.creditGuard = creditGuard;
     }
@@ -174,7 +178,9 @@ public final class OpenAiCompatibleDecisionProvider implements SemanticDecisionP
         messages.addObject().put("role", "system").put("content", SYSTEM);
         try {
             var input = objectMapper.createObjectNode();
-            input.set("state", objectMapper.valueToTree(request.state().payload()));
+            // The state and questions are embedded as text, so map keys must be ordered
+            // before serialization rather than left to the JVM's map iteration order.
+            input.set("state", stateMapper.valueToTree(request.state().payload()));
             input.set("questions", questions);
             messages.addObject().put("role", "user").put("content", objectMapper.writeValueAsString(input));
         } catch (Exception e) {

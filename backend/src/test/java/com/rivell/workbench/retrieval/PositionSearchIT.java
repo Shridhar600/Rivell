@@ -3,6 +3,7 @@ package com.rivell.workbench.retrieval;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -84,6 +85,7 @@ class PositionSearchIT {
 
         private final FakeEmbeddingProvider fallback = new FakeEmbeddingProvider();
         volatile boolean down;
+        volatile List<String> lastInputs = List.of();
 
         @Override
         public String id() {
@@ -92,6 +94,7 @@ class PositionSearchIT {
 
         @Override
         public EmbeddingBatch embed(EmbeddingRequest request) {
+            lastInputs = List.copyOf(request.inputs());
             if (down) {
                 throw new com.rivell.workbench.intelligence.ProviderUnavailableException(
                         "embedding provider unavailable");
@@ -150,6 +153,9 @@ class PositionSearchIT {
     EvidenceService evidenceService;
 
     @Autowired
+    EvidenceIndexService indexService;
+
+    @Autowired
     RetrievalRepository repository;
 
     @Autowired
@@ -161,6 +167,7 @@ class PositionSearchIT {
     @BeforeEach
     void freshOrganization() {
         embeddings.down = false;
+        embeddings.lastInputs = List.of();
         identityProvider.use(new UserIdentity(UUID.randomUUID(), UUID.randomUUID(), Set.of("ADMIN")));
     }
 
@@ -324,5 +331,19 @@ class PositionSearchIT {
         assertThat(first.laneInfo().vectorRank()).isEqualTo(1);
         assertThat(first.laneInfo().fusedRank()).isEqualTo(1);
         assertThat(first.laneInfo().fusedScore()).isPositive();
+    }
+
+    @Test
+    void embeddingBatchOrdersInputsByContentNotByCandidateId() {
+        var lateId = UUID.fromString("ffffffff-ffff-ffff-ffff-ffffffffffff");
+        var earlyId = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+        var texts = new LinkedHashMap<UUID, String>();
+        texts.put(lateId, "Zeta position text");
+        texts.put(earlyId, "Alpha position text");
+
+        indexService.embedBatch(organizationId(), texts);
+
+        assertThat(embeddings.lastInputs)
+                .containsExactly("Alpha position text", "Zeta position text");
     }
 }

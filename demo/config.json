@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "knowledge": [
+    {
+      "file": "knowledge/Commercial Contracts Playbook v4.2.docx",
+      "artifactType": "PLAYBOOK",
+      "declaredContractTypes": ["MSA", "ORDER_FORM", "SOW"],
+      "phase": "base"
+    },
+    {
+      "file": "knowledge/Clause Library.docx",
+      "artifactType": "CLAUSE_LIBRARY",
+      "declaredContractTypes": ["MSA", "ORDER_FORM", "SOW"],
+      "phase": "base"
+    },
+    {
+      "file": "knowledge/Data Protection Playbook.docx",
+      "artifactType": "PLAYBOOK",
+      "declaredContractTypes": ["DPA"],
+      "phase": "base"
+    },
+    {
+      "file": "knowledge/NDA Playbook.xlsx",
+      "artifactType": "PLAYBOOK",
+      "declaredContractTypes": ["MNDA"],
+      "phase": "tour"
+    }
+  ],
+  "contracts": [
+    {
+      "file": "contracts/Kestrel Assurance - Master Services Agreement (returned markup).docx",
+      "review": {
+        "contractType": "MSA",
+        "ourSideRole": "SUPPLIER",
+        "paperSource": "COUNTERPARTY_PAPER",
+        "jurisdiction": "UK",
+        "contractPackKey": "MSA_PACK"
+      },
+      "appliesKnowledge": [
+        "knowledge/Commercial Contracts Playbook v4.2.docx",
+        "knowledge/Clause Library.docx"
+      ],
+      "stage": "mid-review",
+      "phase": "base"
+    },
+    {
+      "file": "contracts/Kestrel Assurance - Order Form KAG-2026-014.docx",
+      "review": {
+        "contractType": "ORDER_FORM",
+        "ourSideRole": "SUPPLIER",
+        "paperSource": "COUNTERPARTY_PAPER",
+        "jurisdiction": "UK",
+        "contractPackKey": null
+      },
+      "appliesKnowledge": [
+        "knowledge/Commercial Contracts Playbook v4.2.docx",
+        "knowledge/Clause Library.docx"
+      ],
+      "stage": "finalized",
+      "phase": "base"
+    },
+    {
+      "file": "contracts/Kestrel Assurance - Statement of Work No. 1.docx",
+      "review": {
+        "contractType": "SOW",
+        "ourSideRole": "SUPPLIER",
+        "paperSource": "COUNTERPARTY_PAPER",
+        "jurisdiction": "UK",
+        "contractPackKey": null
+      },
+      "appliesKnowledge": [
+        "knowledge/Commercial Contracts Playbook v4.2.docx",
+        "knowledge/Clause Library.docx"
+      ],
+      "stage": "analyzed",
+      "phase": "base"
+    },
+    {
+      "file": "contracts/Vantage Health - Data Processing Agreement.docx",
+      "review": {
+        "contractType": "DPA",
+        "ourSideRole": "SUPPLIER",
+        "paperSource": "COUNTERPARTY_PAPER",
+        "jurisdiction": "UNSPECIFIED",
+        "contractPackKey": null
+      },
+      "appliesKnowledge": [
+        "knowledge/Data Protection Playbook.docx"
+      ],
+      "stage": "decided",
+      "phase": "base"
+    },
+    {
+      "file": "contracts/Sablepoint Analytics - Mutual NDA.docx",
+      "review": {
+        "contractType": "MNDA",
+        "ourSideRole": "PARTY_A",
+        "paperSource": "COUNTERPARTY_PAPER",
+        "jurisdiction": "US",
+        "contractPackKey": "NDA_PACK"
+      },
+      "appliesKnowledge": [
+        "knowledge/NDA Playbook.xlsx"
+      ],
+      "stage": "finalized",
+      "phase": "tour"
+    }
+  ]
+}

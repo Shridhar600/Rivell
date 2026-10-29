@@ -76,6 +76,16 @@ public class SemanticConflictAnalyzer implements DuplicateConflictDetector {
                 .filter(published0 -> compatiblePaperSource(published0, candidate))
                 .filter(published0 -> compatibleJurisdiction(published0, candidate))
                 .filter(published0 -> effectivePeriodsOverlap(published0, candidate))
+                // oldest first, as the published read returns them; content breaks ties so a
+                // fresh database selects the same peers rather than whichever random ids won.
+                .sorted(java.util.Comparator
+                        .comparing(KnowledgeCandidate::createdAt)
+                        .thenComparing(KnowledgeCandidate::rawLabel)
+                        .thenComparing(peer -> java.util.Objects.toString(
+                                peer.effectiveContentText(), ""))
+                        .thenComparing(peer -> java.util.Objects.toString(
+                                peer.effectiveConceptKey(), ""))
+                        .thenComparing(KnowledgeCandidate::id))
                 .limit(MAX_PEERS)
                 .toList();
     }

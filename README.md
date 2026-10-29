@@ -78,17 +78,16 @@ Rivell is self-hosted. Contracts and knowledge are stored in your own PostgreSQL
 
 ## Try the demo
 
-The demo loads fictional contracts, playbooks and reviews in every state, from waiting to a verified redline. It needs no API keys.
-
-You need Java 21, Node `^22.22.2` or `>=24.15`, and Docker.
+The demo loads the Bramber corpus locally: four knowledge sources, five contracts, and
+reviews from first analysis to a verified redline. It needs Docker and Java 21, and no
+model keys: it replays a recording of a real run.
 
 ```bash
-# 1. Database
-cd backend
-docker compose up -d
+# 1. Build the backend once (clean, so removed demo resources cannot survive in the jar)
+cd backend && ./mvnw -q -DskipTests clean package && cd ..
 
-# 2. Backend with demo data on http://localhost:8080
-RIVELL_DEMO_SEED_ENABLED=true ./mvnw spring-boot:run
+# 2. Start PostgreSQL, replay the recorded model calls, and seed the demo
+scripts/demo/seed.sh
 
 # 3. Frontend on http://localhost:5173 (in a second terminal)
 cd frontend
@@ -97,7 +96,8 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:5173. To start over, run `docker compose down -v` and start again. Keep the background worker off for the demo (the default), so the waiting review stays waiting.
+`seed.sh` leaves the backend and the local model tape running; stop them with
+`scripts/demo/stop.sh`. The recording is real model output from a real run, not edited.
 
 ## Run it with your own contracts
 
@@ -130,7 +130,6 @@ Then start the frontend as in the demo. Add a playbook under **Knowledge**, appr
 | `RIVELL_EMBEDDINGS_PROVIDER` | no | empty (full-text only) | `openai-compatible` turns on vector search |
 | `RIVELL_EMBEDDINGS_API_KEY`, `RIVELL_EMBEDDINGS_MODEL` | with embeddings | | Embeddings key and model; a local Ollama works too |
 | `RIVELL_DATASOURCE_URL` | no | `jdbc:postgresql://localhost:5432/rivell` | Database |
-| `RIVELL_DEMO_SEED_ENABLED` | no | `false` | Loads the fictional demo data |
 | `VITE_API_PROXY_TARGET` (frontend `.env`) | no | `http://localhost:8080` | Where the frontend sends API calls |
 
 Everything else has a sensible default; see `backend/src/main/resources/application.properties`.

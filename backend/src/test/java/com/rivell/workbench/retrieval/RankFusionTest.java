@@ -21,16 +21,15 @@ class RankFusionTest {
         var b = UUID.randomUUID();
         var fused = RankFusion.fuse(Map.of(
                 "lexical", List.of(new RankFusion.LaneHit(a, 1)),
-                "vector", List.of(new RankFusion.LaneHit(b, 1))));
+                "vector", List.of(new RankFusion.LaneHit(b, 1))),
+                Map.of(a, "Alpha position", b, "Beta position"));
 
         assertThat(fused).hasSize(2);
         assertThat(fused.get(0).score()).isEqualTo(1.0 / 61);
         assertThat(fused.get(0).fusedRank()).isEqualTo(1);
         assertThat(fused.get(1).score()).isEqualTo(1.0 / 61);
-        // tie broken by stable candidate id ordering
-        var first = fused.get(0).candidateId();
-        var second = fused.get(1).candidateId();
-        assertThat(first.compareTo(second)).isLessThan(0);
+        assertThat(fused).extracting(RankFusion.FusedHit::candidateId)
+                .containsExactly(a, b);
     }
 
     @Test
@@ -41,12 +40,30 @@ class RankFusionTest {
         lanes.put("lexical", List.of(new RankFusion.LaneHit(both, 2),
                 new RankFusion.LaneHit(lexicalOnly, 1)));
         lanes.put("vector", List.of(new RankFusion.LaneHit(both, 1)));
-        var fused = RankFusion.fuse(lanes);
+        var fused = RankFusion.fuse(lanes,
+                Map.of(both, "Both lanes", lexicalOnly, "Lexical only"));
 
         assertThat(fused.get(0).candidateId()).isEqualTo(both);
         assertThat(fused.get(0).lanes()).containsExactly("lexical", "vector");
         assertThat(fused.get(0).laneRanks()).containsExactly(2, 1);
         assertThat(fused.get(1).candidateId()).isEqualTo(lexicalOnly);
+    }
+
+    @Test
+    void tiesAreBrokenByContentNotByCandidateId() {
+        var idThatSortsFirst = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+        var idThatSortsLast = UUID.fromString("00000000-0000-0000-0000-00000000000b");
+        var lanes = Map.of(
+                "lexical", List.of(new RankFusion.LaneHit(idThatSortsLast, 1),
+                        new RankFusion.LaneHit(idThatSortsFirst, 1)));
+        var content = Map.of(
+                idThatSortsFirst, "Beta position",
+                idThatSortsLast, "Alpha position");
+
+        var fused = RankFusion.fuse(lanes, content);
+
+        assertThat(fused).extracting(RankFusion.FusedHit::candidateId)
+                .containsExactly(idThatSortsLast, idThatSortsFirst);
     }
 
     @Test
@@ -58,8 +75,9 @@ class RankFusionTest {
         lanes.put("lexical", List.of(new RankFusion.LaneHit(a, 1), new RankFusion.LaneHit(b, 2)));
         lanes.put("vector", List.of(new RankFusion.LaneHit(c, 1), new RankFusion.LaneHit(a, 2)));
 
-        var first = RankFusion.fuse(lanes);
-        var second = RankFusion.fuse(lanes);
+        var content = Map.of(a, "Alpha position", b, "Beta position", c, "Gamma position");
+        var first = RankFusion.fuse(lanes, content);
+        var second = RankFusion.fuse(lanes, content);
         assertThat(second).isEqualTo(first);
         assertThat(first).extracting(RankFusion.FusedHit::candidateId)
                 .containsExactly(a, c, b);

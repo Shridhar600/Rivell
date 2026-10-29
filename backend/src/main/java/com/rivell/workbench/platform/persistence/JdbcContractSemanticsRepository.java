@@ -495,9 +495,9 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         // (semantics_id, heading_node_id) served it, so it returned heading-node id order: stable,
         // but meaningless in production, where document node ids are random UUIDs.
         // SemanticsDigest sorts clauses itself, so the review snapshot pin was never affected.
-        // The heading-node id is only a tie-break for a clause whose node is missing, where no
-        // document position exists; the left join keeps such a clause readable rather than
-        // dropping it.
+        // Clauses whose node is missing have no document position; the left join keeps them
+        // readable rather than dropping them, and their content text breaks the tie so a fresh
+        // database returns them in the same order rather than by random heading id.
         var clauses = jdbcClient.sql("""
                         with recursive tree as (
                             select n.id, array[n.ordinal] as sort_path
@@ -515,7 +515,8 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
                         from contract_clause_semantics c
                         left join tree on tree.id = c.heading_node_id
                         where c.semantics_id = :id
-                        order by tree.sort_path nulls last, c.heading_node_id
+                        order by tree.sort_path nulls last, c.content_text,
+                          c.heading_node_id
                         """)
                 .param("id", semanticsId)
                 .param("versionId", versionId)

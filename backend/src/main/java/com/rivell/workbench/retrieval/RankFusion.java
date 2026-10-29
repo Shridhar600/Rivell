@@ -11,8 +11,9 @@ import java.util.UUID;
 /**
  * Deterministic rank fusion for candidate-generation lanes (Architecture Decision
  * #8.2). Raw per-lane scores (FTS rank, vector distance) are never mixed; only ranks
- * enter the fusion (Reciprocal Rank Fusion, k = 60). Ties break by stable candidate
- * id ordering, so identical inputs always produce the same fused order.
+ * enter the fusion (Reciprocal Rank Fusion, k = 60). Ties break by the caller's content
+ * key, so identical content always produces the same fused order; the candidate id only
+ * separates rows whose content key is also equal.
  */
 public final class RankFusion {
 
@@ -38,10 +39,13 @@ public final class RankFusion {
     }
 
     /**
-     * Fuses per-lane rank lists into one deterministic ordering. A candidate absent
-     * from a lane contributes nothing for that lane — lanes never fabricate ranks.
+     * Fuses per-lane rank lists and breaks score ties by each candidate's content key. The
+     * key is the caller's stable description of what the model will read, not a database id.
+     * A candidate absent from a lane contributes nothing for that lane — lanes never
+     * fabricate ranks.
      */
-    public static List<FusedHit> fuse(Map<String, List<LaneHit>> lanes) {
+    public static List<FusedHit> fuse(Map<String, List<LaneHit>> lanes,
+            Map<UUID, String> tieBreakers) {
         var lanesPerCandidate = new LinkedHashMap<UUID, LinkedHashSet<String>>();
         var ranksPerCandidate = new LinkedHashMap<UUID, List<Integer>>();
         var totals = new LinkedHashMap<UUID, Double>();
@@ -65,6 +69,8 @@ public final class RankFusion {
         }
         ordered.sort(Comparator
                 .comparingDouble(FusedHit::score).reversed()
+                .thenComparing((FusedHit hit) ->
+                        tieBreakers.getOrDefault(hit.candidateId(), ""))
                 .thenComparing(FusedHit::candidateId));
         var fused = new ArrayList<FusedHit>();
         for (int i = 0; i < ordered.size(); i++) {

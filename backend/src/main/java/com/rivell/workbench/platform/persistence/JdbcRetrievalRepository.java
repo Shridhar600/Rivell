@@ -208,7 +208,7 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                           and index_version = :indexVersion
                           and lexical_tsvector
                               @@ websearch_to_tsquery(cast(lexical_config as regconfig), :lexicalQuery)
-                        order by score desc, candidate_id
+                        order by score desc, content_hash, legal_concept_key, candidate_id
                         limit :limit
                         """)
                 .param("organizationId", organizationId)
@@ -240,7 +240,7 @@ class JdbcRetrievalRepository implements RetrievalRepository {
                           and embedding_model = :embeddingModel
                           and embedding_dims = :embeddingDims
                           and embedding_index_ready
-                        order by %s, candidate_id
+                        order by %s, content_hash, legal_concept_key, candidate_id
                         limit :limit
                         """.formatted(distance, distance))
                 .param("organizationId", organizationId)

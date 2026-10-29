@@ -223,6 +223,50 @@ class ContractSemanticsSchemaIT {
     }
 
     @Test
+    void clausesWithoutADocumentPositionAreOrderedByContent() {
+        var organizationId = UUID.randomUUID();
+        var versionId = stagedVersion(organizationId);
+        var root = insertNode(versionId, null, "BODY", null, null);
+        // Two sibling headings with the same ordinal have the same document sort path, so
+        // only the content tie-break can order them. ALPHA has the higher id.
+        var alphaHeading = insertNode(versionId, root, "HEADING", "Alpha heading", "1");
+        var betaHeading = insertNode(versionId, root, "HEADING", "Beta heading", "2");
+        var alphaId = UUID.fromString("00000000-0000-0000-0000-00000000000b");
+        var betaId = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+        jdbcClient.sql("update document_node set id = :to where id = :from")
+                .param("to", UUID.fromString("00000000-0000-0000-0000-0000000000bb"))
+                .param("from", alphaHeading).update();
+        jdbcClient.sql("update document_node set id = :to where id = :from")
+                .param("to", alphaId).param("from", UUID.fromString(
+                        "00000000-0000-0000-0000-0000000000bb")).update();
+        jdbcClient.sql("update document_node set id = :to where id = :from")
+                .param("to", betaId).param("from", betaHeading).update();
+        alphaHeading = alphaId;
+        betaHeading = betaId;
+        var classification = new ConceptClassification(
+                List.of(CoreConcepts.LIMITATION_OF_LIABILITY), List.of(),
+                Map.of(CoreConcepts.LIMITATION_OF_LIABILITY, 0.9));
+        var alpha = new ClauseSemantics(UUID.randomUUID(), versionId, alphaHeading,
+                ContractRegionSegmenter.SemanticRegionKind.CLAUSE, List.of(), "Alpha clause text",
+                classification, List.of(), List.of(), FactCorrection.NONE, null);
+        var beta = new ClauseSemantics(UUID.randomUUID(), versionId, betaHeading,
+                ContractRegionSegmenter.SemanticRegionKind.CLAUSE, List.of(), "Beta clause text",
+                classification, List.of(), List.of(), FactCorrection.NONE, null);
+        var semantics = new ContractSemantics(UUID.randomUUID(), versionId, organizationId,
+                EnrichmentStatus.READY, ContractSemantics.PIPELINE_VERSION,
+                ReviewProfile.minimal(ContractType.MSA), List.of(), List.of(), List.of(),
+                List.of(), List.of(alpha, beta), List.of(), QualityReasons.NONE, null,
+                List.of(), null);
+
+        transactionTemplate.executeWithoutResult(status ->
+                semanticsRepository.replaceSemantics(semantics));
+
+        var loaded = semanticsRepository.find(versionId, organizationId).orElseThrow();
+        assertThat(loaded.clauses()).extracting(ClauseSemantics::contentText)
+                .containsExactly("Alpha clause text", "Beta clause text");
+    }
+
+    @Test
     void partyCorrectionPersistsWithoutErasingMachineRoles() {
         var organizationId = UUID.randomUUID();
         var versionId = stagedVersion(organizationId);

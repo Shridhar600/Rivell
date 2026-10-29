@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router/dom'
+import { DemoChrome, installDemo } from '@demo-hooks'
 import { AppErrorBoundary } from './app/AppErrorBoundary'
 import { AppProviders } from './app/AppProviders'
 import { router } from './app/router'
@@ -11,15 +12,24 @@ import './styles/m10b-knowledge.css'
 import './styles/m10b-dialog.css'
 import './styles/m10b-compile.css'
 
-const rootElement = document.getElementById('root')
-if (!rootElement) throw new Error('Root element #root not found')
+const found = document.getElementById('root')
+if (!found) throw new Error('Root element #root not found')
+const rootElement: HTMLElement = found
 
-createRoot(rootElement).render(
-  <StrictMode>
-    <AppProviders>
-      <AppErrorBoundary>
-        <RouterProvider router={router} />
-      </AppErrorBoundary>
-    </AppProviders>
-  </StrictMode>,
-)
+// The demo build installs its captured transport before the first request; the normal build's
+// `installDemo` is a no-op and its `DemoChrome` renders nothing.
+async function start() {
+  await installDemo()
+  createRoot(rootElement).render(
+    <StrictMode>
+      <AppProviders>
+        <AppErrorBoundary>
+          <RouterProvider router={router} />
+          <DemoChrome />
+        </AppErrorBoundary>
+      </AppProviders>
+    </StrictMode>,
+  )
+}
+
+void start()

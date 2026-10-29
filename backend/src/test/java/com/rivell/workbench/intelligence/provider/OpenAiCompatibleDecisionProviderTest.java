@@ -87,6 +87,39 @@ class OpenAiCompatibleDecisionProviderTest {
     }
 
     @Test
+    void userContentSortsEquivalentStateMapKeys() {
+        var sent = new java.util.ArrayList<String>();
+        var provider = new OpenAiCompatibleDecisionProvider((path, payload) -> {
+            sent.add(payload);
+            return response("""
+                    {"needs_review":{"answer":"no","confidence":0.9},
+                     "position_1":{"answer":"WALK_AWAY","confidence":0.8}}""");
+        }, objectMapper, properties);
+        var unordered = Map.of("delta", "1", "alpha", "2", "charlie", "3");
+        var sorted = new java.util.TreeMap<String, String>(unordered);
+
+        provider.execute(request(unordered));
+        provider.execute(request(sorted));
+
+        assertThat(sent.get(1)).isEqualTo(sent.get(0));
+    }
+
+    private DecisionExecutionRequest request(Object statePayload) {
+        var base = request();
+        return new DecisionExecutionRequest(base.modelAlias(), new SemanticState() {
+            @Override
+            public int schemaVersion() {
+                return 1;
+            }
+
+            @Override
+            public Object payload() {
+                return statePayload;
+            }
+        }, base.pack());
+    }
+
+    @Test
     void disabledReasoningIsSentAsEffortNone() throws Exception {
         var sent = new AtomicReference<String>();
         var noReasoning = new GenerativeProperties(

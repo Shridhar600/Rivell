@@ -1,0 +1,377 @@
+{
+  "version": 1,
+  "contracts": {
+    "contracts/Kestrel Assurance - Master Services Agreement (returned markup).docx": {
+      "decisions": [
+        {
+          "subject": "CLAUSE",
+          "section": "Indemnities",
+          "concept": "INDEMNIFICATION",
+          "issueFamily": "POSITION_WALK_AWAY",
+          "action": "ACCEPT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": null
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Fees, invoicing and payment",
+          "concept": "FEES_AND_PAYMENT",
+          "issueFamily": "POSITION_ACCEPTABLE_FALLBACK",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Payment terms are within our fallback.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Confidentiality",
+          "concept": "CONFIDENTIALITY_OBLIGATIONS",
+          "issueFamily": "POSITION_ACCEPTABLE_FALLBACK",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Within our approved fallback. No change.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        }
+      ]
+    },
+    "contracts/Kestrel Assurance - Order Form KAG-2026-014.docx": {
+      "decisions": [
+        {
+          "subject": "CLAUSE",
+          "section": "3. Service levels",
+          "concept": "SERVICE_LEVELS",
+          "issueFamily": "POSITION_WALK_AWAY",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Commercial lead approved these service levels for Kestrel.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "4.3 Termination for convenience. Customer may terminate this Order Form for convenience at any time on thirty (30) days' written notice, without liability for the unexpired portion of the Initial Subscription Term.",
+          "concept": "TERMINATION_FOR_CONVENIENCE",
+          "issueFamily": "POSITION_WALK_AWAY",
+          "action": "ACCEPT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": null
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "2. Fees",
+          "concept": "FEES_AND_PAYMENT",
+          "issueFamily": "POSITION_WALK_AWAY",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Finance approved these payment terms for this deal.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "4.5 Set-off. Customer may set off any service credit or undisputed amount owed by the Supplier against Fees due under this Order Form.",
+          "concept": "FEES_AND_PAYMENT",
+          "issueFamily": "POSITION_WALK_AWAY",
+          "action": "ACCEPT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": null
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "1.2 Key terms. The key terms of this Order Form are set out in the table below. Where a term is not specified, the corresponding provision of the MSA applies.",
+          "concept": "RENEWAL",
+          "issueFamily": "POSITION_AMBIGUOUS",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Clear when read with the master agreement.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "6. Insurance",
+          "concept": "INSURANCE",
+          "issueFamily": "POSITION_AMBIGUOUS",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Our current cover meets these limits.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "4.1 Term and renewal. The Initial Subscription Term is 36 months from the Effective Date. The Order Form renews automatically for successive 12-month periods unless either party gives at least 120 days' written notice before the end of the then-current term.",
+          "concept": "TERM",
+          "issueFamily": "POSITION_ACCEPTABLE_FALLBACK",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Within our approved fallback. No change.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "5. Data protection and security",
+          "concept": "SECURITY_MEASURES",
+          "issueFamily": "POSITION_UNCERTAIN",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Checked against our security standard. No change.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "4.4 Liability. The limitation of liability in Clause 11.2 of the MSA is replaced for this Order Form by a cap equal to the Fees paid or payable in the twenty-four (24) months preceding the event giving rise to the claim. Clause 11.3 of the MSA continues to apply, except Clause 11.3(d) (data protection), for this Order Form and any SOW under it.",
+          "concept": "LIMITATION_OF_LIABILITY",
+          "issueFamily": "POSITION_ACCEPTABLE_FALLBACK",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Within our approved fallback. No change.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "4.4 Liability. The limitation of liability in Clause 11.2 of the MSA is replaced for this Order Form by a cap equal to the Fees paid or payable in the twenty-four (24) months preceding the event giving rise to the claim. Clause 11.3 of the MSA continues to apply, except Clause 11.3(d) (data protection), for this Order Form and any SOW under it.",
+          "concept": "LIMITATION_OF_LIABILITY",
+          "issueFamily": "POSITION_UNCERTAIN",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "This paragraph only points to the cap in the master agreement.",
+          "rejectReason": "FINDING_WRONG"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "1.2 Key terms. The key terms of this Order Form are set out in the table below. Where a term is not specified, the corresponding provision of the MSA applies.",
+          "concept": "RENEWAL",
+          "issueFamily": "POSITION_ACCEPTABLE_FALLBACK",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Within our approved fallback. No change.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "4.7 Expenses. Travel and expenses are not separately chargeable for the implementation. Any expenses for additional professional services require a written change order.",
+          "concept": "FEES_AND_PAYMENT",
+          "issueFamily": "POSITION_ACCEPTABLE_FALLBACK",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Within our approved fallback. No change.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        }
+      ]
+    },
+    "contracts/Vantage Health - Data Processing Agreement.docx": {
+      "decisions": [
+        {
+          "subject": "CLAUSE",
+          "section": "Approval condition. Controller's prior written consent is required for each sub-processor, including replacements. Processor shall not engage a sub-processor until the consent is recorded in writing.",
+          "concept": "SUB_PROCESSORS",
+          "issueFamily": "POSITION_WALK_AWAY",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Head of legal approved prior written approval for this customer.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Liability and indemnity",
+          "concept": "INDEMNIFICATION",
+          "issueFamily": "POSITION_WALK_AWAY",
+          "action": "ACCEPT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": null
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Audits and inspections",
+          "concept": "AUDIT_RIGHTS",
+          "issueFamily": "POSITION_WALK_AWAY",
+          "action": "ACCEPT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": null
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Sub-processors",
+          "concept": "SUB_PROCESSORS",
+          "issueFamily": "POSITION_WALK_AWAY",
+          "action": "ACCEPT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": null
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Approval condition. Controller's prior written consent is required for each sub-processor, including replacements. Processor shall not engage a sub-processor until the consent is recorded in writing.",
+          "concept": "SUB_PROCESSORS",
+          "issueFamily": "POSITION_UNCERTAIN",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Same clause as the approval finding, decided there.",
+          "rejectReason": "FINDING_WRONG"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Processor obligations",
+          "concept": "PROCESSOR_DUTIES",
+          "issueFamily": "POSITION_AMBIGUOUS",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Reads as our standard processor duties.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Confidentiality of personnel",
+          "concept": "PROCESSOR_DUTIES",
+          "issueFamily": "POSITION_NEEDS_FALLBACK",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Our staff confidentiality terms already cover this.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Term and termination",
+          "concept": "TERM",
+          "issueFamily": "POSITION_AMBIGUOUS",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "The term follows the main agreement.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Schedule 2 — Approved Sub-processors",
+          "concept": "SUB_PROCESSORS",
+          "issueFamily": "POSITION_AMBIGUOUS",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "The list matches our current sub-processors.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Processor obligations",
+          "concept": "PROCESSOR_DUTIES",
+          "issueFamily": "POSITION_UNCERTAIN",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Checked. No change needed.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Return and deletion",
+          "concept": "RETURN_OR_DESTRUCTION",
+          "issueFamily": "POSITION_UNCERTAIN",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "The deletion period matches our retention policy.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Data subject rights",
+          "concept": "DATA_SUBJECT_AND_REGULATORY_ASSISTANCE",
+          "issueFamily": "POSITION_ACCEPTABLE_FALLBACK",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Within our approved fallback. No change.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Personal data breaches",
+          "concept": "BREACH_NOTIFICATION",
+          "issueFamily": "POSITION_ACCEPTABLE_FALLBACK",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Within our approved fallback. No change.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Security",
+          "concept": "SECURITY_MEASURES",
+          "issueFamily": "POSITION_UNCERTAIN",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Checked against our security standard. No change.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "Schedule 1 — Details of Processing",
+          "concept": "PROCESSING_DETAILS",
+          "issueFamily": "POSITION_UNCERTAIN",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "The processing details are accurate.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        }
+      ]
+    },
+    "contracts/Sablepoint Analytics - Mutual NDA.docx": {
+      "decisions": [
+        {
+          "subject": "CLAUSE",
+          "section": "10. Non-Solicitation. During the Term and for twelve (12) months thereafter, Bramber shall not, directly or indirectly, solicit for employment or hire any employee of Sablepoint. General recruitment advertising that is not targeted at Sablepoint employees is not a breach of this Clause.",
+          "concept": "NON_SOLICIT_EMPLOYEES",
+          "issueFamily": "POLICY_UNAVAILABLE",
+          "action": "EDIT",
+          "approvedAction": "DELETE",
+          "approvedLanguage": null,
+          "comment": "A one-way non-solicitation is outside our NDA playbook. Remove it."
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "7. Term. This Agreement begins on the Effective Date and continues for five (5) years, unless terminated earlier by mutual written agreement. The confidentiality obligations in this Agreement survive for the term and for three (3) years after termination, except for Trade Secrets, which are protected for as long as they remain Trade Secrets.",
+          "concept": "TERM",
+          "issueFamily": "POLICY_UNAVAILABLE",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Five years agreed with Sablepoint for this evaluation.",
+          "rejectReason": "KEEP_AS_DRAFTED"
+        },
+        {
+          "subject": "CLAUSE",
+          "section": "13. General. This Agreement is the entire agreement between the parties on its subject matter and supersedes any prior confidentiality agreement, except as set out in Schedule 1. No variation is effective unless in writing and signed by both parties. No failure or delay in exercising a right operates as a waiver of that right. Neither party may assign this Agreement without the other's prior written consent, except to an Affiliate or a successor in a merger or sale of substantially all assets. If any provision is held invalid, the remaining provisions continue in effect. A person who is not a party has no right to enforce any provision of this Agreement. This Agreement may be executed in counterparts.",
+          "concept": "ENTIRE_AGREEMENT",
+          "issueFamily": "POLICY_UNAVAILABLE",
+          "action": "REJECT",
+          "approvedAction": null,
+          "approvedLanguage": null,
+          "comment": "Standard boilerplate. No change.",
+          "rejectReason": "FINDING_WRONG"
+        }
+      ]
+    }
+  }
+}
