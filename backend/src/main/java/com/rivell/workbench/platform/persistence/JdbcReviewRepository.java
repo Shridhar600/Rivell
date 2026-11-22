@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,9 +34,11 @@ import com.rivell.workbench.review.ReviewStatus;
 class JdbcReviewRepository implements ReviewRepository {
 
     private final JdbcClient jdbcClient;
+    private final NamedParameterJdbcTemplate namedTemplate;
 
-    JdbcReviewRepository(JdbcClient jdbcClient) {
+    JdbcReviewRepository(JdbcClient jdbcClient, NamedParameterJdbcTemplate namedTemplate) {
         this.jdbcClient = jdbcClient;
+        this.namedTemplate = namedTemplate;
     }
 
     @Override
@@ -134,8 +138,24 @@ class JdbcReviewRepository implements ReviewRepository {
             }
         }
 
-        for (var check : checks) {
-            jdbcClient.sql("""
+        var rows = checks.stream()
+                .map(check -> new MapSqlParameterSource()
+                        .addValue("id", check.id())
+                        .addValue("reviewId", check.reviewId())
+                        .addValue("organizationId", check.organizationId())
+                        .addValue("ordinal", check.ordinal())
+                        .addValue("checkKey", check.checkKey())
+                        .addValue("family", check.family().name())
+                        .addValue("expectation", check.expectation() == null ? null : check.expectation().name())
+                        .addValue("mechanism", check.mechanism().name())
+                        .addValue("concept", check.concept().value())
+                        .addValue("secondaryConcept",
+                                check.secondaryConcept() == null ? null : check.secondaryConcept().value())
+                        .addValue("subjectHeadingNodeId", check.subjectHeadingNodeId())
+                        .addValue("createdAt", timestamp(check.createdAt())))
+                .toArray(MapSqlParameterSource[]::new);
+        if (rows.length > 0) {
+            namedTemplate.batchUpdate("""
                     insert into review_plan_check
                       (id, review_id, organization_id, ordinal, check_key, family,
                        expectation, mechanism, concept, secondary_concept,
@@ -143,20 +163,7 @@ class JdbcReviewRepository implements ReviewRepository {
                     values (:id, :reviewId, :organizationId, :ordinal, :checkKey, :family,
                        :expectation, :mechanism, :concept, :secondaryConcept,
                        :subjectHeadingNodeId, :createdAt)
-                    """)
-                    .param("id", check.id())
-                    .param("reviewId", check.reviewId())
-                    .param("organizationId", check.organizationId())
-                    .param("ordinal", check.ordinal())
-                    .param("checkKey", check.checkKey())
-                    .param("family", check.family().name())
-                    .param("expectation", check.expectation() == null ? null : check.expectation().name())
-                    .param("mechanism", check.mechanism().name())
-                    .param("concept", check.concept().value())
-                    .param("secondaryConcept", check.secondaryConcept() == null ? null : check.secondaryConcept().value())
-                    .param("subjectHeadingNodeId", check.subjectHeadingNodeId())
-                    .param("createdAt", timestamp(check.createdAt()))
-                    .update();
+                    """, rows);
         }
     }
 
