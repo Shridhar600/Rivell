@@ -166,6 +166,33 @@ class OpenAiCompatibleDecisionProviderTest {
     }
 
     @Test
+    void aYesNoAnswerThatIsNeitherYesNorNoIsAProtocolError() {
+        var provider = new OpenAiCompatibleDecisionProvider((path, payload) -> response("""
+                {"needs_review":{"answer":"Yes","confidence":0.9},
+                 "position_1":{"answer":"WALK_AWAY","confidence":0.8}}"""), objectMapper, properties);
+
+        assertThatThrownBy(() -> provider.execute(request()))
+                .isInstanceOf(ProviderProtocolException.class)
+                .hasMessageContaining("not yes or no");
+    }
+
+    @Test
+    void anOutOfCreditErrorInsideASuccessfulResponseShortCircuitsTheProvider() {
+        var guard = new com.rivell.workbench.intelligence.ProviderCreditGuard(new TestClock());
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var provider = new OpenAiCompatibleDecisionProvider((path, payload) -> {
+            calls.incrementAndGet();
+            return "{\"error\":{\"code\":\"insufficient_quota\"}}";
+        }, objectMapper, properties, guard);
+
+        assertThatThrownBy(() -> provider.execute(request()))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+        assertThatThrownBy(() -> provider.execute(request()))
+                .isInstanceOf(com.rivell.workbench.intelligence.ProviderOutOfCreditException.class);
+        assertThat(calls).hasValue(1);
+    }
+
+    @Test
     void everyBillingCodeAndTheLegacyQuotaTypeAreOutOfCredit() {
         for (var body : List.of(
                 "{\"error\":{\"code\":\"credit_balance_exhausted\"}}",

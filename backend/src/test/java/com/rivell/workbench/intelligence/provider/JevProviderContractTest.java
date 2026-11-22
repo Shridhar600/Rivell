@@ -21,6 +21,7 @@ import com.rivell.workbench.intelligence.NoProviderConfiguredException;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
 import com.rivell.workbench.intelligence.ProviderRejectedException;
 import com.rivell.workbench.intelligence.ProviderTimeoutException;
+import com.rivell.workbench.intelligence.ProviderRateLimitedException;
 import com.rivell.workbench.intelligence.ProviderUnavailableException;
 import com.rivell.workbench.intelligence.ProviderExecutionResult;
 import com.rivell.workbench.intelligence.QuestionPack;
@@ -131,6 +132,17 @@ class JevProviderContractTest {
                         .isInstanceOf(ProviderUnavailableException.class)
                         .hasMessageContaining(String.valueOf(status));
             }
+        }
+    }
+
+    @Test
+    void aRateLimitKeepsTheProvidersRetryAfter() throws Exception {
+        try (var server = new MockJevServer(new Response(429, "{}", null, "30"))) {
+            var provider = new JevProvider(properties(server.port(), Duration.ofSeconds(5)), MAPPER);
+
+            assertThatThrownBy(() -> provider.execute(request(pack())))
+                    .isInstanceOfSatisfying(ProviderRateLimitedException.class,
+                            e -> assertThat(e.retryAfter()).isEqualTo(Duration.ofSeconds(30)));
         }
     }
 
@@ -277,6 +289,9 @@ class JevProviderContractTest {
                 lastRequestBody.set(new String(exchange.getRequestBody().readAllBytes()));
                 lastAuthHeader.set(exchange.getRequestHeaders().getFirst("Authorization"));
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
+                if (response.retryAfter() != null) {
+                    exchange.getResponseHeaders().set("Retry-After", response.retryAfter());
+                }
                 byte[] body = body(response);
                 exchange.sendResponseHeaders(response.status(), body.length);
                 exchange.getResponseBody().write(body);
@@ -316,10 +331,14 @@ class JevProviderContractTest {
         }
     }
 
-    record Response(int status, String body, Duration delay) {
+    record Response(int status, String body, Duration delay, String retryAfter) {
 
         Response(int status, String body) {
-            this(status, body, null);
+            this(status, body, null, null);
+        }
+
+        Response(int status, String body, Duration delay) {
+            this(status, body, delay, null);
         }
     }
 }

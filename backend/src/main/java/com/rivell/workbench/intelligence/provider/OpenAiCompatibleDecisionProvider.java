@@ -91,9 +91,7 @@ public final class OpenAiCompatibleDecisionProvider implements SemanticDecisionP
             var failure = OpenAiCompatibleErrors.httpFailure(
                     e.getStatusCode().value(), e.getResponseBodyAsString(),
                     e.getResponseHeaders(), "decision");
-            if (failure instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
-                creditGuard.record(creditKey());
-            }
+            creditGuard.recordIfOutOfCredit(creditKey(), failure);
             throw failure;
         } catch (RestClientException e) {
             throw translateTransportFailure(e);
@@ -106,6 +104,12 @@ public final class OpenAiCompatibleDecisionProvider implements SemanticDecisionP
             response = objectMapper.readValue(body, OpenAiCompatibleDtos.ChatResponse.class);
         } catch (Exception e) {
             throw new ProviderProtocolException("Provider response could not be parsed");
+        }
+        if (response.error() != null) {
+            var failure = OpenAiCompatibleErrors.errorResponse(
+                    response.error().code(), response.error().type(), "decision");
+            creditGuard.recordIfOutOfCredit(creditKey(), failure);
+            throw failure;
         }
         if (response.choices() == null || response.choices().size() != 1
                 || response.choices().get(0).message() == null) {
@@ -215,6 +219,9 @@ public final class OpenAiCompatibleDecisionProvider implements SemanticDecisionP
             }
             var confidence = Math.max(0.0, Math.min(1.0, answer.path("confidence").asDouble()));
             if (question instanceof YesNoQuestion) {
+                if (!"yes".equals(value) && !"no".equals(value)) {
+                    throw new ProviderProtocolException("Answer for " + name + " is not yes or no");
+                }
                 answers.put(name, new YesNoAnswer("yes".equals(value) ? confidence : 1.0 - confidence));
             } else if (question instanceof ChoiceQuestion choice) {
                 if (!choice.criteria().containsKey(value)) {

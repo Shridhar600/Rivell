@@ -15,7 +15,6 @@ import com.rivell.workbench.intelligence.EmbeddingProvider;
 import com.rivell.workbench.intelligence.EmbeddingRequest;
 import com.rivell.workbench.intelligence.NoProviderConfiguredException;
 import com.rivell.workbench.intelligence.ProviderCreditGuard;
-import com.rivell.workbench.intelligence.ProviderOutOfCreditException;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
 import com.rivell.workbench.intelligence.ProviderRateLimitedException;
 import com.rivell.workbench.intelligence.ProviderRejectedException;
@@ -215,9 +214,7 @@ public final class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvide
             var failure = OpenAiCompatibleErrors.httpFailure(
                     e.getStatusCode().value(), e.getResponseBodyAsString(),
                     e.getResponseHeaders(), "embedding");
-            if (failure instanceof ProviderOutOfCreditException) {
-                creditGuard.record(creditKey());
-            }
+            creditGuard.recordIfOutOfCredit(creditKey(), failure);
             throw failure;
         } catch (RestClientException e) {
             throw translateTransportFailure(e);
