@@ -32,7 +32,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * P2b, knowledge side (design 2026-10-12 §9): a part of an uploaded playbook that Rivell did not
+ * A part of an uploaded playbook that Rivell did not
  * take as a position can be made one by a person. Rivell's own reading stays beside the person's,
  * the new candidate goes through review and publication like any other, and the same part can
  * only be made a position once.

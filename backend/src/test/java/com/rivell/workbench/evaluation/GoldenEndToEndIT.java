@@ -67,7 +67,7 @@ import com.rivell.workbench.review.ReviewPackRegistry;
 import com.rivell.workbench.review.ReviewService;
 
 /**
- * M10 golden end-to-end corpus.
+ * Golden end-to-end corpus.
  *
  * <p>Drives the complete product flow over the real HTTP API — DOCX upload, structure read,
  * semantic enrichment, knowledge upload, candidate approval, publication, review creation, machine
@@ -78,7 +78,7 @@ import com.rivell.workbench.review.ReviewService;
  * <p>Each case declares its expected checkpoints before the run. A per-case labeled result record is
  * written to {@code target/eval/} so later evaluation work has a stable artifact to read.
  *
- * <p>Coverage limits are declared in the M10 eval provider-strategy matrix, not guessed here.
+ * <p>Coverage limits are declared in the eval provider-strategy matrix, not guessed here.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -655,9 +655,9 @@ class GoldenEndToEndIT {
     }
 
     /**
-     * The M5 enrichment cue provider and the M7 review scripted provider are independent
+     * The enrichment cue provider and the review scripted provider are independent
      * implementations of the same port, and the full flow needs both. This configuration composes
-     * them: review packs go to the review provider, everything else to the M5 cue provider. The
+     * them: review packs go to the review provider, everything else to the cue provider. The
      * generative side dispatches on the spec's field shape.
      */
     @org.springframework.boot.test.context.TestConfiguration(proxyBeanMethods = false)

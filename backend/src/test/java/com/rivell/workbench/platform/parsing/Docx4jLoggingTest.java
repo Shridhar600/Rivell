@@ -42,7 +42,7 @@ class Docx4jLoggingTest {
 
     @Test
     void parsingContractFixturesLogsNoDocx4jError() throws Exception {
-        // The m5 contract fixtures carry word/styles.xml but no relationship that points at it.
+        // The contract fixtures carry word/styles.xml but no relationship that points at it.
         var parser = new DocxStructuralParser(new DocxParserProperties(200L * 1024 * 1024));
         var fixtures = Path.of("src/test/resources/fixtures");
         try (var files = Files.list(fixtures)) {

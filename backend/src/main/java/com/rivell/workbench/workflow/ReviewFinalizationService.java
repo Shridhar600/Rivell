@@ -23,7 +23,7 @@ import com.rivell.workbench.review.ReviewRepository;
 /**
  * Explicit review finalization: serializes with decision writes on the review row,
  * re-validates readiness inside the transaction, derives the deterministic approved
- * changes, and freezes the immutable M8 → M9 artifact. Idempotent — a second finalize
+ * changes, and freezes the immutable approved-change artifact. Idempotent — a second finalize
  * returns the existing set.
  */
 public class ReviewFinalizationService {
@@ -73,7 +73,7 @@ public class ReviewFinalizationService {
             if (!progress.readyToFinalize()) {
                 throw new ReviewNotFinalizableException(progress.blockers());
             }
-            // Freeze the semantics digest the review planned against. M9 derives INSERT
+            // Freeze the semantics digest the review planned against. The renderer derives INSERT
             // placement from effective concepts and must be able to prove it is still using
             // the classification the human approved changes against.
             var snapshot = reviewRepository.findSnapshot(organizationId, reviewId)

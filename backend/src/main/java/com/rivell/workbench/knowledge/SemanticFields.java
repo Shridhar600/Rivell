@@ -8,7 +8,7 @@ import java.util.Set;
 import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
- * Machine-proposed semantic fields of a knowledge candidate (M4). The machine proposal is
+ * Machine-proposed semantic fields of a knowledge candidate. The machine proposal is
  * retained even after human correction; effective values prefer the human edit. Fields are
  * typed — never a generic map. Values meaningful per candidate subtype: positions/approval/
  * escalation trigger for playbook rules, variant role for clause variants, concept

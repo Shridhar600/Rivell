@@ -245,7 +245,7 @@ class ReviewCreationIT {
         assertThat(snapshot.modelPolicy().decisionModelAlias()).isEqualTo("fake-decision-model");
         assertThat(snapshot.modelPolicy().generativeProviderId()).isEqualTo("fake");
         assertThat(snapshot.modelPolicy().generativeModelAlias()).isEqualTo("fake-gen-model");
-        // P6: engine v1 is removed; every new review is frozen on v2
+        // Every new review is frozen on engine v2.
         assertThat(snapshot.reviewEngine()).isEqualTo(ReviewEngine.V2);
 
         var checks = reviewRepository.findPlanChecks(organizationId, review.id());
@@ -365,10 +365,9 @@ class ReviewCreationIT {
     }
 
     /**
-     * M10A integration review: the key identifies one operation, and the pack is part of that
-     * operation. Replaying a key with a different pack used to return the original review, which
-     * handed the caller a review frozen against a playbook it did not select, and skipped pack
-     * validation entirely. The replay must be refused.
+     * The key identifies one operation, and the pack is part of that operation. Replaying a key
+     * with a different pack must be refused: returning the original review would hand the caller
+     * a review frozen against a playbook it did not select and skip pack validation entirely.
      */
     @Test
     void aReplayWithADifferentContractPackIsRefused() {
@@ -442,10 +441,9 @@ class ReviewCreationIT {
     }
 
     /**
-     * Final review C1: the creation catch used to cover the after-commit enqueue as well as the
-     * review insert. A failed enqueue was read back as the idempotency winner, so the caller was
-     * told the create succeeded while the review had no job. Only the insert may be treated as a
-     * race; an enqueue failure has to surface.
+     * Only the review insert may be treated as an idempotency race. A failed enqueue must
+     * surface, not be read back as the idempotency winner, or the caller is told the create
+     * succeeded while the review has no job.
      */
     @Test
     void anEnqueueFailureSurfacesInsteadOfBeingReturnedAsAReplay() {
@@ -470,10 +468,8 @@ class ReviewCreationIT {
     }
 
     /**
-     * M10 review finding: the idempotency pre-check cannot observe a concurrent identical request, so
-     * two simultaneous submits both missed it. The unique index keeps one review, but the loser used
-     * to surface a 500 - the worst possible answer to a client that asked for idempotent creation,
-     * because it has no way to learn that the review it wanted now exists.
+     * Concurrent identical submits can both pass the idempotency pre-check; the unique index
+     * keeps one review, and the loser must return the winner rather than a 500.
      */
     @Test
     void concurrentIdenticalCreationsConvergeOnOneReview() throws Exception {
@@ -634,7 +630,7 @@ class ReviewCreationIT {
                 where contract_version_id = :versionId and organization_id = :organizationId
                 """)
                 .param("status", status)
-                // M10: FAILED is schema-coupled to a structured reason, exactly as the service does.
+                // FAILED is schema-coupled to a structured reason, exactly as the service does.
                 .param("reason", "FAILED".equals(status) ? "INTERNAL" : null)
                 .param("versionId", versionId)
                 .param("organizationId", organizationId)

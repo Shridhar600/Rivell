@@ -18,7 +18,7 @@ import com.rivell.workbench.redline.DocumentExecutionPlan;
 import com.rivell.workbench.redline.RedlinePlanResolver;
 import com.rivell.workbench.redline.RedlineTestStructures;
 
-/** Real-fixture pipeline helper: fixture bytes → M1 structure → resolved plan. */
+/** Real-fixture pipeline helper: fixture bytes → parsed structure → resolved plan. */
 public final class RedlineFixturePipeline {
 
     public static final String AUTHOR = "Rivell";

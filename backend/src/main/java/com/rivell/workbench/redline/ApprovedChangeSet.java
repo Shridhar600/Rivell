@@ -6,13 +6,13 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * The frozen M8 → M9 boundary artifact: exactly the changes a human authorized for one
+ * The frozen approved-change artifact: exactly the changes a human authorized for one
  * review, bound to the review's contract version and active analysis run. Immutable
- * once finalized; M9 consumes it without legal or model reasoning.
+ * once finalized; the renderer consumes it without legal or model reasoning.
  *
  * <p>{@code semanticsDigest} is the review snapshot's digest of the contract semantics the
- * review planned against. M9 uses it to prove that the effective concepts feeding INSERT
- * placement are still the ones the review froze, and fails closed when they are not.
+ * review planned against. The renderer uses it to prove that the effective concepts feeding
+ * INSERT placement are still the ones the review froze, and fails closed when they are not.
  */
 public record ApprovedChangeSet(
         UUID id,

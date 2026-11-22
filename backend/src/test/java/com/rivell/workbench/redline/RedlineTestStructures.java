@@ -14,7 +14,7 @@ import com.rivell.workbench.contracts.DocumentNodeType;
 import com.rivell.workbench.contracts.ParseStatus;
 import com.rivell.workbench.contracts.SourceSpan;
 
-/** Synthetic M1 structures and frozen artifacts for pure redline plan tests. */
+/** Synthetic document structures and frozen artifacts for pure redline plan tests. */
 public final class RedlineTestStructures {
 
     private RedlineTestStructures() {

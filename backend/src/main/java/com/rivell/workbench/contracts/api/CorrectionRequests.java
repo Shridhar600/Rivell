@@ -7,7 +7,7 @@ import com.rivell.workbench.contracts.PartyRole;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-/** Human correction requests over M5 machine interpretation. */
+/** Human correction requests over machine interpretation. */
 public final class CorrectionRequests {
 
     private CorrectionRequests() {

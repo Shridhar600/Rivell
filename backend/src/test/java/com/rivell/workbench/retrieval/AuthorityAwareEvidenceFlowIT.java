@@ -499,7 +499,7 @@ class AuthorityAwareEvidenceFlowIT {
         // not something retrieval invented from the contract type
         assertThat(ndaRule.applicabilityScope().contractPackKey())
                 .isEqualToIgnoringCase("NDA_PACK");
-        // G-M6-1 wildcard honesty: the NDA rule declares an unbounded effective
+        // Wildcard honesty: the NDA rule declares an unbounded effective
         // period — exposed as honest nulls, never fabricated dates
         assertThat(ndaRule.applicabilityScope().effectiveFrom()).isNull();
         assertThat(ndaRule.applicabilityScope().effectiveTo()).isNull();
@@ -509,7 +509,7 @@ class AuthorityAwareEvidenceFlowIT {
         // and the MSA-pack knowledge never leaks into this NDA-context request
         assertThat(bundle.policyItems().size()).isEqualTo(1);
 
-        // explicit pack selection (pre-M7 decision): a request that explicitly
+        // Explicit pack selection: a request that explicitly
         // selects MSA_PACK must NOT see the NDA_PACK-declared rule — pack is a
         // hard applicability dimension when explicitly declared
         var msaPackRequest = EvidenceRequest.forClauseReview(
@@ -654,7 +654,7 @@ class AuthorityAwareEvidenceFlowIT {
         assertThat(pinnedBundle.policyItems()).hasSize(1);
         assertThat(pinnedBundle.policyItems().get(0).text())
                 .contains("2025 policy standard");
-        // G-M6-1 historical truth: the pinned item carries the scope/version of the
+        // Historical truth: the pinned item carries the scope/version of the
         // source selected by the pin (publication 1), never a hydrated latest scope
         assertThat(pinnedBundle.policyItems().get(0).publicationNumber()).isEqualTo(1);
         assertThat(pinnedBundle.policyItems().get(0).applicabilityScope())

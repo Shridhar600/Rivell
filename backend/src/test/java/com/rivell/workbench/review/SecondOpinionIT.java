@@ -53,7 +53,7 @@ import com.rivell.workbench.retrieval.M6EvidenceCorpus;
  * second opinion. Agreement keeps Jev's finding and says who decided; a disagreement, a failure,
  * an invalid answer or an exhausted budget becomes a "needs your look" finding with both views;
  * a disagreement naming a walk-away or beyond-fallback is MEDIUM, every other one LOW.
- * P6: every analysis runs the v2 path; the stored engine is a record of how the review
+ * Every analysis runs the v2 path; the stored engine is a record of how the review
  * was created.
  */
 @SpringBootTest
@@ -381,7 +381,7 @@ class SecondOpinionIT {
 
         var run = analysisService.analyze(organizationId(), reviewId);
 
-        // P6: a retry runs the v2 path, so Jev's unsure positions get their second opinions ...
+        // A retry runs the v2 path, so Jev's unsure positions get their second opinions ...
         assertThat(generativeProvider.secondOpinionCalls.get()).isEqualTo(2);
         assertThat(judged(run.id())).anySatisfy(position -> assertThat(position)
                 .containsEntry("route", "ADJUDICATE")

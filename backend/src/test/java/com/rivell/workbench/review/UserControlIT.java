@@ -53,7 +53,7 @@ import com.rivell.workbench.workflow.HumanReviewService;
 import com.rivell.workbench.workflow.ReviewFinalizationService;
 
 /**
- * P2b, human control over misses (design 2026-10-12 §9): the user sees what Rivell did with every
+ * Human control over misses: the user sees what Rivell did with every
  * clause, and can add a finding Rivell missed; the added finding is decided, finalized and
  * redlined like any other.
  */

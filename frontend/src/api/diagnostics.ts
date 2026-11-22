@@ -49,7 +49,7 @@ export type DiagnosticsRedlineOutcome = (typeof DIAGNOSTICS_REDLINE_OUTCOMES)[nu
  *
  * Note for consumers: a `FAILED` or `SKIPPED` check also reports `NONE` here, because the backend
  * writes its reason under a different detail key and the diagnostics response does not carry it.
- * The reason for a failed check is available only through the M9 analysis-warnings read.
+ * The reason for a failed check is available only through the analysis-warnings read.
  */
 export type InternalDetail = 'ABSENT' | 'NONE' | 'RECORDED'
 

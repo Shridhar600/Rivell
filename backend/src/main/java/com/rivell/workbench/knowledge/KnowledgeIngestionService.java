@@ -278,7 +278,7 @@ public class KnowledgeIngestionService {
                     artifactId, null, IngestStatus.FAILED,
                     List.of("Rivell could not process this file. Upload it again.")));
         } catch (RuntimeException compensationFailure) {
-            // compensation failed; reconciliation is deferred (M10-class work)
+            // compensation failed; reconciliation is deferred
         }
     }
 
@@ -335,7 +335,7 @@ public class KnowledgeIngestionService {
         try {
             documentStorage.delete(storageKey);
         } catch (IOException cleanupFailure) {
-            // Orphaned immutable file; reconciliation is deferred (M10-class work).
+            // Orphaned immutable file; reconciliation is deferred.
         }
     }
 

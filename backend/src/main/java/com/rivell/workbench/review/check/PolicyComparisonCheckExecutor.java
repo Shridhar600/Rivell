@@ -962,7 +962,7 @@ public final class PolicyComparisonCheckExecutor implements ReviewCheckExecutor 
     }
 
     /**
-     * One fit pack for the clause (engine decision 2026-10-24 §B.1): the search hits that must
+     * One fit pack for the clause: the search hits that must
      * govern its subject and the library wording offers that must meet their position and cure the
      * gap. The type and side scope already ran in the structured lookup, so a candidate is never
      * dropped here by topic. A single candidate whose own concept is the exact concept it serves

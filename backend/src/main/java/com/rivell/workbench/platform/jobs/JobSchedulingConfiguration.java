@@ -19,10 +19,8 @@ class JobSchedulingConfiguration {
     }
 
     /**
-     * M10: review analysis is enqueued, not run inline, and the background worker is off by default.
-     * A default-configured run therefore creates a review that sits in ANALYSIS_QUEUED forever, with
-     * no error and no hint about why. This is the single most confusing behaviour in the product, and
-     * the cheapest possible fix is to say it out loud once at startup.
+     * Review analysis is enqueued, not run inline, and the background worker is off by default,
+     * so a review sits in ANALYSIS_QUEUED with no error. Say it once at startup.
      */
     @Bean
     ApplicationListener<ApplicationReadyEvent> backgroundWorkerStartupNotice(

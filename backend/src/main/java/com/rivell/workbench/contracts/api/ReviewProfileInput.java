@@ -8,7 +8,7 @@ import com.rivell.workbench.contracts.PartyRole;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Human-declared enrichment context (M5). Supplies disambiguation context only —
+ * Human-declared enrichment context. Supplies disambiguation context only —
  * never review policy.
  */
 public record ReviewProfileInput(

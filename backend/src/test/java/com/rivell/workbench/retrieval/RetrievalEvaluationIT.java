@@ -26,7 +26,7 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * Engineering observation over the assembled M6 evidence request: lane behavior,
+ * Engineering observation over the assembled evidence request: lane behavior,
  * candidate counts, sufficiency, and stage latency. Not a benchmark.
  */
 @SpringBootTest

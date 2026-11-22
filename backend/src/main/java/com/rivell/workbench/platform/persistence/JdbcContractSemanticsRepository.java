@@ -82,7 +82,7 @@ class JdbcContractSemanticsRepository implements ContractSemanticsRepository {
         var claimed = jdbcClient.sql("""
                 update contract_semantics
                 set enrichment_status = 'ENRICHING', review_profile = cast(:profile as jsonb),
-                    -- M10: must clear the reason. V18 couples FAILED to a non-null reason, and this
+                    -- Must clear the reason. V18 couples FAILED to a non-null reason, and this
                     -- is the only statement that moves a version back to ENRICHING, so a stale reason
                     -- left here makes every retry of a FAILED enrichment violate the CHECK and
                     -- permanently brick the version.

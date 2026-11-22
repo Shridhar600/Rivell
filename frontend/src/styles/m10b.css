@@ -1,4 +1,4 @@
-/* M10B design-system layer.
+/* Design-system layer.
    Tokens come from m10b-tokens.css (frozen Product Design values, unchanged).
    Declarations follow the canonical Home prototype (rivell-home-v5.html), expressed through those
    tokens. Classes are prefixed rv-. Every colour here is a token. No literal hex. */
@@ -1448,7 +1448,7 @@ a {
   color: var(--accent);
 }
 
-/* M10B's own visually-hidden, so this layer does not depend on the legacy stylesheet. */
+/* Visually-hidden helper, so this layer does not depend on the legacy stylesheet. */
 .rv-visually-hidden {
   position: absolute;
   width: 1px;

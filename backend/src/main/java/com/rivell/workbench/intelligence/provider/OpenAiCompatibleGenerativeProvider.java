@@ -32,7 +32,7 @@ import com.rivell.workbench.intelligence.TokenUsage;
 import com.fasterxml.jackson.databind.JsonNode;
 
 /**
- * OpenAI-compatible generative adapter (M5): serves OpenAI direct, OpenRouter, and
+ * OpenAI-compatible generative adapter: serves OpenAI direct, OpenRouter, and
  * the Vercel AI Gateway with base URL + API key + model as configuration. Builds a
  * strict-mode json_schema response format from the reasoning spec, requests
  * temperature 0, and parses the returned JSON object into the typed field map.

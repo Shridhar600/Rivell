@@ -17,7 +17,7 @@ import com.rivell.workbench.intelligence.provider.JevProvider;
 import com.rivell.workbench.intelligence.provider.JevProperties;
 
 /**
- * Opt-in live Jev smoke for the M6 retrieval DecisionSpecs. Runs ONLY when
+ * Opt-in live Jev smoke for the retrieval decision specs. Runs ONLY when
  * TYPESAFE_API_KEY is present in the environment; normal verification never
  * requires network access or credentials. Fixture text only — no customer content.
  */

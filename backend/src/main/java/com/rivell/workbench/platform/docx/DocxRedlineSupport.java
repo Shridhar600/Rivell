@@ -33,7 +33,7 @@ import org.docx4j.wml.Tr;
 
 import jakarta.xml.bind.JAXBElement;
 
-/** Shared docx4j helpers for the M9 renderer and verifier. */
+/** Shared docx4j helpers for the redline renderer and verifier. */
 final class DocxRedlineSupport {
 
     private DocxRedlineSupport() {
@@ -43,7 +43,7 @@ final class DocxRedlineSupport {
         return element instanceof JAXBElement<?> jaxbElement ? jaxbElement.getValue() : element;
     }
 
-    /** A top-level (or SDT-nested) paragraph with the M1 parser's anchor semantics. */
+    /** A top-level (or SDT-nested) paragraph with the parser's anchor semantics. */
     record ParagraphRef(int bodyIndex, int paragraphIndex, P paragraph) {
     }
 

@@ -30,8 +30,8 @@ import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
 /**
- * Engine v2 with {@code rivell.review.definitions=false}: the judges read the clause as before
- * P3 — no definitions in the serialized state, no defined terms in the check detail.
+ * Engine v2 with {@code rivell.review.definitions=false}: the judges read the clause without
+ * definitions in the serialized state and without defined terms in the check detail.
  */
 @SpringBootTest(properties = "rivell.review.definitions=false")
 @Testcontainers

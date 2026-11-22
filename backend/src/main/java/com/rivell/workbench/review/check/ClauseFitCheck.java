@@ -16,7 +16,7 @@ import com.rivell.workbench.intelligence.UnknownDecisionSpecException;
 import com.rivell.workbench.intelligence.YesNoAnswer;
 
 /**
- * One fit check for both lanes (engine decision 2026-10-24 §1 contract C, principle 4): a
+ * One fit check for both lanes: a
  * search-found rule must govern the clause's subject, and clause-library wording must meet the
  * position it serves and cure the clause's gap. Deterministic type and side scope has already run
  * in the structured lookup, so this class never drops a candidate by topic: it asks bounded yes/no

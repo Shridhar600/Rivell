@@ -44,7 +44,7 @@ import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 import com.rivell.workbench.workflow.api.ReviewDiagnosticsService;
 
 /**
- * R4/R2: a transient infrastructure error at a check's terminal write must not kill the run. The
+ * A transient infrastructure error at a check's terminal write must not kill the run. The
  * run stays RUNNING, the transient counter records it, the failed check's lease is released, and
  * the next {@code analyze} resumes the same run without repeating a finished check. The terminal
  * paths (the third transient failure, a non-transient failure) and the retry-exhausted filter are

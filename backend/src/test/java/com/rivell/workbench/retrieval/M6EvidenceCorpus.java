@@ -32,9 +32,9 @@ import com.rivell.workbench.knowledge.KnowledgeQueryService;
 import com.rivell.workbench.knowledge.ReviewStatus;
 
 /**
- * The M6 labeled evidence corpus. Authoritative knowledge is published through the
+ * The labeled evidence corpus. Authoritative knowledge is published through the
  * real ingestion → review → publication flows (no direct table seeding); the current
- * contract is a real M5 enrichment. Publication numbers are recorded per fixture so
+ * contract is a real enrichment. Publication numbers are recorded per fixture so
  * snapshot-pinned requests are reproducible.
  */
 public final class M6EvidenceCorpus {

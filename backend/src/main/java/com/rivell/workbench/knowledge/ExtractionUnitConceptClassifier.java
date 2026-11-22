@@ -10,7 +10,7 @@ import com.rivell.workbench.taxonomy.TopicClassification;
 import com.rivell.workbench.taxonomy.TopicClassifier;
 
 /**
- * The one M3 production semantic task: propose the bounded legal topics an
+ * The production semantic task: propose the bounded legal topics an
  * extraction unit expresses. The result is a proposal — never organizational
  * truth, never persisted, never mutating candidate or publication state.
  */

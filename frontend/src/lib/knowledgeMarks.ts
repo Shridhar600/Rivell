@@ -1,7 +1,7 @@
 import type { Candidate, ExtractionUnit } from '../api/knowledge'
 
 /**
- * What became of one part of an uploaded file (design 2026-10-12 §9): taken as a candidate, read
+ * What became of one part of an uploaded file: taken as a candidate, read
  * by Rivell as something other than a position, or read as a position or wording yet holding
  * nothing. A part with no text, or with no kind decision, gets no mark: there was no gate to miss.
  */

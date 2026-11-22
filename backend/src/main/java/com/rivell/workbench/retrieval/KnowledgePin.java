@@ -2,7 +2,7 @@ package com.rivell.workbench.retrieval;
 
 /**
  * Pin on the organizational knowledge state a retrieval must respect (AD #8.11).
- * The M7 ReviewSnapshot will supply these pins; M6 accepts them on the request.
+ * The review snapshot supplies these pins; retrieval accepts them on the request.
  * A null publication number means "resolve the organization's latest publication",
  * and that resolution is recorded in the retrieval trace — never silently assumed.
  * {@link #NONE} (0) is a real frozen pin: no published knowledge was visible when the

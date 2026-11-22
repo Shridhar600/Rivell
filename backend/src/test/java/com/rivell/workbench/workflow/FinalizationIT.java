@@ -264,7 +264,7 @@ class FinalizationIT {
     }
 
     /**
-     * Final review C3: a run whose plan did not fully execute can look mostly healthy and still
+     * A run whose plan did not fully execute can look mostly healthy and still
      * leave clauses unreviewed. Any failed, skipped or deadline-degraded check must block
      * finalization. An honest degraded result (the model answered, but partially) is different: it
      * covers its clause, so it must stay finalizable exactly as before.
@@ -373,7 +373,7 @@ class FinalizationIT {
     }
 
     /**
-     * M10: the product's hardest failure to diagnose is a review that stops. With the default
+     * The hardest failure to diagnose is a review that stops. With the default
      * configuration there is no background worker, so an enqueued analysis is never picked up and the
      * review sits in ANALYSIS_QUEUED with nothing to indicate why. The diagnostics surface has to
      * say so plainly, and it has to say it without exposing contract text.
@@ -451,10 +451,10 @@ class FinalizationIT {
     }
 
     /**
-     * M10: a run whose checks all degraded produced a COMPLETED review with zero Findings, which
-     * was then finalizable into a zero-change ApprovedChangeSet and a NO_CHANGES redline. That is
-     * the worst possible failure for a legal tool: a clean-looking artifact from an analysis that
-     * never actually ran. A degraded analysis must be reported as a typed blocker.
+     * A run whose checks all degraded must not read as clean: it must be reported as a typed
+     * blocker. Otherwise it is finalizable into a zero-change ApprovedChangeSet and a NO_CHANGES
+     * redline, the worst failure for a legal tool: a clean-looking artifact from an analysis that
+     * never actually ran.
      */
     @Test
     void aDegradedAnalysisBlocksFinalizationInsteadOfReadingAsClean() throws Exception {

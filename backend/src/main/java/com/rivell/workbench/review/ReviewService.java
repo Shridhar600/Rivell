@@ -29,7 +29,7 @@ import com.rivell.workbench.retrieval.RetrievalProperties;
 /**
  * Review creation: validate the contract version and enrichment truth, resolve pack
  * and "latest" dependencies exactly once, freeze the snapshot and plan, persist the
- * aggregate. Analysis execution is enqueued separately (M7 orchestration batch).
+ * aggregate. Analysis execution is enqueued separately.
  */
 public class ReviewService {
 
@@ -84,12 +84,6 @@ public class ReviewService {
     }
 
     /**
-     * With a client-supplied key, creation is idempotent. A retry or a double-click
-     * returns the original review instead of freezing a second snapshot, planning a second run and
-     * paying for a second analysis. The replay is resolved before any work, and the unique index on
-     * (organization_id, client_request_id) is the authority when two identical requests race.
-     */
-    /**
      * A key identifies one operation. Returning a review recorded for a different contract, version
      * or contract pack would be a confused deputy: the caller would receive a valid, fully populated
      * review built from a playbook it did not select, and would then decide, finalise and redline
@@ -111,6 +105,12 @@ public class ReviewService {
         return existing;
     }
 
+    /**
+     * With a client-supplied key, creation is idempotent. A retry or a double-click returns the
+     * original review instead of freezing a second snapshot, planning a second run and paying for a
+     * second analysis. The replay is resolved before any work, and the unique index on
+     * (organization_id, client_request_id) is the authority when two identical requests race.
+     */
     public Review create(UUID contractId, int versionNumber, String requestedPackKey,
             UUID clientRequestId) {
         var identity = identityProvider.currentIdentity();
@@ -193,10 +193,8 @@ public class ReviewService {
                 eventPublisher.publishEvent(new ReviewCreatedEvent(organizationId, reviewId));
             });
         } catch (org.springframework.dao.DataIntegrityViolationException conflict) {
-            // M10 review finding: the pre-check cannot see a concurrent identical request, so two
-            // simultaneous submits both missed it and the loser's insert violated the unique index.
-            // The index enforces the invariant but does not return the winner, so read it back: the
-            // client asked for an idempotent create and must get the original review, not a 500.
+            // A concurrent identical submit can pass the pre-check and then hit the unique index,
+            // which enforces the invariant without returning the winner: read the winner back.
             if (!inserted.get() && clientRequestId != null) {
                 var winner = reviewRepository.findByClientRequestId(organizationId, clientRequestId);
                 if (winner.isPresent()) {

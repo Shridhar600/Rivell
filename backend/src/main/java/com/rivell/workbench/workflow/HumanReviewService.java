@@ -79,10 +79,7 @@ public class HumanReviewService {
         var completedChecks = (int) checkOutcomes.stream()
                 .filter(execution -> execution.status() == CheckExecutionStatus.COMPLETED)
                 .count();
-        // M10 review finding: the false-clean signature only exists once a run has actually
-        // completed. Before that there are no executions at all, so "none completed" was true for
-        // every freshly created review and the review was told its analysis environment was broken
-        // when nothing had run yet. Only a completed run can have produced no trustworthy result.
+        // Only a completed run can be false-clean; a review with no executions yet is not broken.
         var analysisComplete = review.status() == ReviewStatus.COMPLETED && activeRun.isPresent();
         var producedNoTrustworthyResult = activeRun.isPresent()
                 && plannedChecks > 0

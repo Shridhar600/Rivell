@@ -17,7 +17,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 /**
- * Schema-level guards for the M10B-B1 organization-wide list reads.
+ * Schema-level guards for the organization-wide list reads.
  *
  * <p>Two different things are asserted here, and the distinction matters.
  *

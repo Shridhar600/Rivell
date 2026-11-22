@@ -29,7 +29,7 @@ import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
 /**
- * G-M7-4 regression: the production boundary is the JobRunr worker invoking the
+ * The production boundary is the JobRunr worker invoking the
  * registered handler reflectively, not {@link ReviewAnalysisService#analyze}. This
  * IT enables the real background job server over a real database, creates a review
  * through the API, and requires the worker to drive ANALYSIS_QUEUED to COMPLETED.

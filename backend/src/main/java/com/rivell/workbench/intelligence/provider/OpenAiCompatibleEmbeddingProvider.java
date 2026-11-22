@@ -23,7 +23,7 @@ import com.rivell.workbench.intelligence.ProviderUnavailableException;
 import com.rivell.workbench.intelligence.TokenUsage;
 
 /**
- * OpenAI-compatible embedding adapter (M6): serves OpenAI direct and OpenRouter
+ * OpenAI-compatible embedding adapter: serves OpenAI direct and OpenRouter
  * with base URL + API key + model as configuration. Sends batched inputs, validates
  * response ordering (data[i].index == i) and dimensionality, and reports usage.
  * Fail-closed: malformed or partial responses never become domain vectors. A batch that

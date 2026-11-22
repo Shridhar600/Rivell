@@ -6,8 +6,8 @@ import java.time.Instant;
 
 /**
  * Deterministic compilation of a parsed knowledge source into extraction units and typed
- * candidates. Fixture-grade mapping in M2 (version {@link #COMPILER_VERSION}); semantic
- * intelligence is inserted here in M4 without changing the surrounding architecture.
+ * candidates. Deterministic only (version {@link #COMPILER_VERSION}); semantic
+ * interpretation happens downstream.
  */
 public final class KnowledgeCompiler {
 

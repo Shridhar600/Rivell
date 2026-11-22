@@ -220,7 +220,7 @@ public class CandidateReviewService {
 
     /**
      * Human taxonomy-key correction on a candidate before publication:
-     * same layering proven in M5 contracts — the machine concept is preserved,
+     * same layering as contract semantics — the machine concept is preserved,
      * a human correction (set key, or blank = clear to unclassified) defines the
      * effective concept that publication and retrieval consume. A correction that
      * changes the effective concept re-runs conflict analysis and review

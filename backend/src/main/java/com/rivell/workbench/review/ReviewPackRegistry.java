@@ -8,7 +8,7 @@ import java.util.Optional;
 import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.taxonomy.CoreConcepts;
 
-/** Code-owned pack registry; M7 MVP ships one versioned constant set. */
+/** Code-owned pack registry; one versioned constant set. */
 public final class ReviewPackRegistry {
 
     public static final String VERSION = "rivell-review-pack-1";

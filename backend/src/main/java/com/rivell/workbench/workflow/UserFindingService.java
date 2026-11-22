@@ -26,7 +26,7 @@ import com.rivell.workbench.review.ReviewRepository;
 import com.rivell.workbench.review.ReviewStatus;
 
 /**
- * A person adds a finding Rivell missed (design 2026-10-12 §9). The addition is an ordinary
+ * A person adds a finding Rivell missed. The addition is an ordinary
  * finding of the active completed run, review-required, with no proposal, so the person decides
  * it like any other: EDIT to change the clause, REJECT (with a reason) to withdraw it. The same
  * guards as a decision apply, under the same review-row lock, so an addition can neither race a

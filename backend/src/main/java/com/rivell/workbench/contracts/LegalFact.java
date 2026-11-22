@@ -6,7 +6,7 @@ import java.util.Objects;
 /**
  * One typed legal fact extracted from a clause region. The schema defines the shape;
  * every value is validated against it at construction. Facts carry no acceptability
- * judgment — that is M7 territory, never M5.
+ * judgment; review policy owns that decision.
  */
 public record LegalFact(String factSchema, int schemaVersion, Map<String, String> values) {
 

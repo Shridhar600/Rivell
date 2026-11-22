@@ -10,7 +10,7 @@ import com.rivell.workbench.intelligence.SemanticDecisionService;
 import com.rivell.workbench.intelligence.YesNoAnswer;
 
 /**
- * M4 duplicate/conflict/supersession analysis behind the M2 hook port.
+ * Duplicate/conflict/supersession analysis behind the hook port.
  * Stage A (code) narrows plausible published peers by organization-scoped compatibility:
  * same candidate family, same primary concept, compatible contract types (declared and record
  * scope) and paper source, known compatible jurisdiction, and overlapping effective periods.
