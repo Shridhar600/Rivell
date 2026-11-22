@@ -34,8 +34,8 @@ import com.rivell.workbench.organization.UserIdentity;
  * The machine wording is the reliable record of source order: extraction rendered it left to
  * right, so the order is recovered from it and verified against the stored values.
  *
- * <p>The rows here are inserted in the pre-M10B-B6 shape on purpose, so this fails against any
- * implementation that only understands rows written after the fix.
+ * <p>The rows here are inserted in the legacy shape on purpose, so this fails against any
+ * implementation that only understands rows carrying a recorded column order.
  */
 @SpringBootTest
 @Testcontainers

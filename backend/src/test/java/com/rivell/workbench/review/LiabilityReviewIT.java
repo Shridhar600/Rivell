@@ -1008,7 +1008,7 @@ public class LiabilityReviewIT {
 
         var run = analysisService.analyze(organizationId, review.id());
 
-        // P6/v2: the whole-contract read runs once and names nothing; no wording is generated
+        // Engine v2: the whole-contract read runs once and names nothing; no wording is generated
         assertThat(generativeProvider.spottingCalls).hasValue(1);
         assertThat(generativeProvider.calls()).isEqualTo(1);
         var signals = analysisRepository.findSignals(organizationId, run.id());

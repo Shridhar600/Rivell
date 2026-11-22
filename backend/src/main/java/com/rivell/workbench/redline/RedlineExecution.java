@@ -7,7 +7,7 @@ import java.util.UUID;
 
 /**
  * One canonical deterministic execution of a frozen ApprovedChangeSet against the exact
- * frozen source DOCX. Immutable; execution state never mutates M7/M8 rows.
+ * frozen source DOCX. Immutable; execution state never mutates review or decision rows.
  */
 public record RedlineExecution(
         UUID id,

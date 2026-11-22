@@ -6,7 +6,7 @@ import java.util.List;
 import com.rivell.workbench.intelligence.SemanticState;
 
 /**
- * Minimal states for M6 retrieval judgments. Payloads carry only the slice a
+ * Minimal states for retrieval judgments. Payloads carry only the slice a
  * judgment needs — never a whole document or provider internals.
  */
 final class M6SemanticStates {

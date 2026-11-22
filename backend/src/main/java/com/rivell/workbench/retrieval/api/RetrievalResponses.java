@@ -11,7 +11,7 @@ import com.rivell.workbench.retrieval.EvidenceItem;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Product contract for the M6 evidence developer surface. Items carry typed
+ * Product contract for the evidence developer surface. Items carry typed
  * authority/provenance/applicability; no provider mechanics, raw embeddings,
  * prompts, or chain-of-thought ever appear here.
  */
@@ -64,7 +64,7 @@ public final class RetrievalResponses {
             ApplicabilityScopeResponse applicabilityScope) {
     }
 
-    /** Single source of truth for the product evidence-item shape (M6 + M7 reuse). */
+    /** Single source of truth for the product evidence-item shape. */
     public static EvidenceItemResponse evidenceItem(EvidenceItem item) {
         return new EvidenceItemResponse(
                 item.evidenceId(),

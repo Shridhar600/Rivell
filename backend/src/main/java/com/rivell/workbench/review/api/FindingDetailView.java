@@ -18,7 +18,7 @@ import com.rivell.workbench.retrieval.api.RetrievalResponses;
 /**
  * Finding detail: observation, proposal, typed quality, evidence-bound claims, and the
  * plan-check basis for absence findings. {@code evidenceItems} are the exact frozen
- * items the finding cites (G-M7-1), resolved from the finding's run and never rebuilt
+ * items the finding cites, resolved from the finding's run and never rebuilt
  * from latest knowledge; every claim evidence id resolves inside this set. Signal ids
  * are provenance references only; no raw signal surface is exposed. {@code addedBy} is the
  * user who added a {@code USER_ADDED} finding, null for findings Rivell assembled.

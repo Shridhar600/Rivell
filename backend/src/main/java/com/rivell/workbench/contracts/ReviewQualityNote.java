@@ -1,8 +1,8 @@
 package com.rivell.workbench.contracts;
 
 /**
- * Semantic-quality reason codes (M5). Meaningful reasons, never a universal numeric
- * confidence score. Findings remain M7 territory; these only surface upstream state.
+ * Semantic-quality reason codes. Meaningful reasons, never a universal numeric
+ * confidence score. These surface upstream state only, never findings.
  */
 public enum ReviewQualityNote {
     NONE,

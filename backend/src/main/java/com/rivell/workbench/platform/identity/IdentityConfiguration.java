@@ -1,5 +1,6 @@
 package com.rivell.workbench.platform.identity;
 
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,6 +14,9 @@ class IdentityConfiguration {
 
     @Bean
     IdentityProvider identityProvider(DevIdentityProperties properties) {
+        LoggerFactory.getLogger(IdentityConfiguration.class).warn(
+                "No sign-in: every request acts as development user {} in organization {} with roles {}",
+                properties.userId(), properties.organizationId(), properties.roles());
         return new DevIdentityProvider(properties);
     }
 

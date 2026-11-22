@@ -24,7 +24,7 @@ import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.taxonomy.TopicClassifier;
 
 /**
- * The M4 semantic compilation pipeline: attaches machine interpretation to deterministic
+ * The semantic compilation pipeline: attaches machine interpretation to deterministic
  * candidates. Stages: artifact-type assessment; per-artifact unknown-label resolution;
  * one record-kind decision per record (records that are not positions or approved wording
  * stay units, never candidates); per-candidate interpretation; conflict analysis via the
@@ -183,9 +183,9 @@ public class SemanticCompilationService {
     }
 
     /**
-     * One part a person marked as a position (design 2026-10-12 §9): the upload path's steps for
-     * each of its candidates, without the record-kind decision the person has just overruled. An
-     * interpretation the providers cannot give leaves the record raw and says so, as at upload.
+     * One part a person marked as a position: the upload path's steps for each of its candidates,
+     * without the record-kind decision the person has just overruled. An interpretation the
+     * providers cannot give leaves the record raw and says so, as at upload.
      */
     public List<KnowledgeCandidate> compileUserPosition(
             KnowledgeArtifact artifact, ExtractionUnit unit, List<KnowledgeCandidate> candidates,

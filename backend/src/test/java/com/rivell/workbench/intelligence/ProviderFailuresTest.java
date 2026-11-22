@@ -16,12 +16,6 @@ class ProviderFailuresTest {
     }
 
     @Test
-    void rethrowIfOutOfCreditLeavesOrdinaryFailuresAlone() {
-        ProviderFailures.rethrowIfOutOfCredit(new ProviderUnavailableException("down"));
-        ProviderFailures.rethrowIfOutOfCredit(null);
-    }
-
-    @Test
     void theReviewerReasonNamesOutOfCredit() {
         assertThat(ProviderFailures.degradedReason(
                 new ProviderOutOfCreditException("Provider account has no credits")))

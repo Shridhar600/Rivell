@@ -49,12 +49,11 @@ import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.review.LiabilityReviewIT;
 
 /**
- * M10: a FAILED enrichment must be diagnosable.
+ * A FAILED enrichment must be diagnosable.
  *
- * <p>The only prior trace was a warning string assembled from the exception class name
- * ("Enrichment failed (ProviderUnavailableException)"). That is not a contract: it is not queryable,
- * it is not stable across refactors, and it does not tell a caller whether the failure is worth
- * retrying. The failure now carries a code-owned reason that survives to the API.
+ * <p>A warning string assembled from the exception class name is not a contract: it is not
+ * queryable, it is not stable across refactors, and it does not tell a caller whether the failure
+ * is worth retrying. The failure therefore carries a code-owned reason that survives to the API.
  *
  * <p>Note the distinction this preserves: a provider outage inside the per-question guard does NOT
  * fail enrichment, it degrades it honestly, and that path is already covered. What reaches a FAILED
@@ -116,8 +115,8 @@ class EnrichmentFailureIT {
                 PaperSource.THIRD_PARTY, Jurisdiction.US, null);
 
         // A version whose parsed structure is gone cannot be enriched. This is a real condition
-        // (partial loss of a version), and it is the kind of failure that used to leave an
-        // FAILED state with nothing but an exception class name in a warning string.
+        // (partial loss of a version), and it must leave a FAILED state with a code-owned reason,
+        // not just an exception class name in a warning string.
         jdbcClient.sql("delete from document_node where contract_version_id = "
                         + "(select id from contract_version where contract_id = :contractId"
                         + " and version_number = 1)")
@@ -224,16 +223,12 @@ class EnrichmentFailureIT {
     }
 
     /**
-     * M10 review finding (CRITICAL, found independently by two reviewers, and twice): the V18 CHECK
-     * couples FAILED to a non-null reason, but the only statement that moves a version back to
-     * ENRICHING did not clear the reason. Retrying a FAILED enrichment therefore violated the CHECK
-     * and permanently bricked the version with a 500, defeating the retry the failure reason exists
-     * to advertise.
+     * V18's CHECK couples FAILED to a non-null reason, and the statement that moves a version
+     * back to ENRICHING must clear the reason. Otherwise a retry violates the CHECK and bricks
+     * the version with a 500, defeating the retry the failure reason exists to advertise.
      *
-     * <p>This drives the real service twice. An earlier version of this test asserted the claim by
-     * hand-writing the corrected SQL, which proved the fix transcribed into a test rather than the fix
-     * itself; reverting {@code beginEnrichment} left the suite green. It now calls
-     * {@code enrichmentService.enrich} again and requires the version to reach READY.
+     * <p>This drives the real service twice, so it proves the service path rather than a
+     * hand-written copy of its SQL.
      */
     @Test
     void aFailedEnrichmentCanBeRetriedThroughTheService() throws Exception {
@@ -258,7 +253,7 @@ class EnrichmentFailureIT {
         // failed the first time. With the claim broken, this call instead dies on the V18 CHECK
         // before it can even try, raising a DataIntegrityViolationException and leaving the version
         // wedged. Asserting on the exception type is what makes this test exercise the production
-        // statement rather than a copy of the fix.
+        // statement rather than a test-local copy of it.
         assertThatThrownBy(() -> enrichmentService.enrich(contractId, 1, profile))
                 .as("retrying a failed enrichment must re-claim, not violate the schema")
                 .isInstanceOf(ContractNotReadableException.class)

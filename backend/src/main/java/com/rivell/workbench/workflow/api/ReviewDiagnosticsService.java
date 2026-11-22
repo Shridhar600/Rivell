@@ -35,7 +35,7 @@ import com.rivell.workbench.workflow.UnauthorizedWorkflowAccessException;
 /**
  * Assembles developer diagnostics for one review.
  *
- * <p>M10. The product's hardest failure to diagnose is a review that simply stops: with the default
+ * <p>The hardest failure to diagnose is a review that simply stops: with the default
  * configuration there is no background worker, so an enqueued analysis is never picked up and the
  * review sits in {@code ANALYSIS_QUEUED} with nothing to indicate why. This service answers that
  * question without a database session, and without exposing contract text. Model output appears
@@ -111,9 +111,8 @@ public class ReviewDiagnosticsService {
             stalled.add("The analysis has not started for this review.");
         }
 
-        // One lookup, reused by the finding counts and the decision counters. Both previously asked
-        // the repository for the latest completed run separately, which is a duplicate read of the
-        // same row on the request an operator makes when something is already wrong.
+        // One lookup, reused by the finding counts and the decision counters: diagnostics must not
+        // read the same latest-completed-run row twice on the request made when something is wrong.
         var completedRun = analysisRepository.findLatestCompletedRun(organizationId, reviewId);
         var decisions = decisionsView(organizationId, reviewId, completedRun);
 
@@ -234,8 +233,8 @@ public class ReviewDiagnosticsService {
     /**
      * A policy comparison's judged positions as the check stored them: keys, categories,
      * probabilities and, on engine v2, the route, the second opinion's outcome and category, and
-     * (part 4) the fit verdict of a searched position. Clause and position text, and the second
-     * opinion's words, never reach the check detail.
+     * the fit verdict of a searched position. Clause and position text, and the second opinion's
+     * words, never reach the check detail.
      */
     static List<ReviewDiagnosticsView.JudgedPositionView> judgedPositions(Map<String, Object> detail) {
         if (detail == null || !(detail.get("positions") instanceof List<?> positions)) {
@@ -360,10 +359,9 @@ public class ReviewDiagnosticsService {
     }
 
     /**
-     * Four integers, computed in the database. The counts came from materialising every finding of
-     * the run together with its concept and claim children, and then discarding the lot; on a large
-     * or degraded run that is the most expensive thing a diagnostic read can do, and it is the run
-     * an operator opens this screen for.
+     * Four integers, computed in the database. Loading every finding of the run with its concept
+     * and claim children just to discard them is the most expensive thing a diagnostic read can do,
+     * and this is the run an operator opens this screen for.
      */
     private ReviewDiagnosticsView.CountsView countsView(
             UUID organizationId, Optional<ReviewAnalysisRun> completedRun) {

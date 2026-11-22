@@ -115,7 +115,7 @@ public class DocxStructuralParser implements DocumentStructureParser {
             var coverage = coverage(docxBytes, walk.nodes(), warnings);
             return new ParseResult(PARSER_VERSION, ParseStatus.OK, warnings, walk.nodes(), coverage);
         } catch (Exception e) {
-            log.warn("Word file could not be parsed ({}: {})", e.getClass().getSimpleName(), e.getMessage());
+            log.warn("Word file could not be parsed", e);
             return new ParseResult(
                     PARSER_VERSION, ParseStatus.FAILED,
                     List.of("Rivell could not read this Word file. Check that it opens in Word, then upload it again."),

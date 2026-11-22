@@ -11,7 +11,7 @@ import java.util.UUID;
  * candidate → unit → node(s) → artifact always resolvable. {@code recordKind} is the
  * {@code knowledge-record-kind} outcome; null until the semantic compilation decides it
  * (or when the decision could not run). {@code override} is a person's correction of that kind
- * (design 2026-10-12 §9, "make this a position"): the machine's kind stays as it was, the
+ * (the "make this a position" correction): the machine's kind stays as it was, the
  * correction and who made it sit beside it, and the effective kind is the person's.
  */
 public record ExtractionUnit(

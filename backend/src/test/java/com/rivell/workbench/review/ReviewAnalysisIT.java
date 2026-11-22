@@ -364,18 +364,10 @@ class ReviewAnalysisIT {
     }
 
     /**
-     * M10: every evidence id a persisted signal cites must resolve to a frozen evidence item stored
-     * with the same run. A citation that cannot be resolved is not a cosmetic problem: the Finding
-     * read cannot satisfy it and the review reports an unresolvable evidence reference. This asserts
-     * the invariant over a real analysis run rather than over a constructed check outcome, so it
-     * holds for whichever checks the pipeline runs.
-     */
-    /**
-     * M10 final-review finding: the degraded-citation path retained signals but returned no evidence
-     * items for them, which persisted those signals' citations with nothing to resolve them against -
-     * the exact dangling citation the change exists to prevent, surfacing much later as a 500 on the
-     * Finding read. This drives the branch directly and asserts both halves: the offending signal is
-     * gone, and every surviving citation still resolves.
+     * Every evidence id a persisted signal cites must resolve to a frozen evidence item stored
+     * with the same run; an unresolvable citation fails the Finding read much later. This drives
+     * the degraded-citation branch directly: the offending signal is dropped, and every surviving
+     * citation still resolves.
      */
     @Test
     void aCheckCitingUnresolvableEvidenceDropsOnlyThatSignalAndKeepsTheRestResolvable() {

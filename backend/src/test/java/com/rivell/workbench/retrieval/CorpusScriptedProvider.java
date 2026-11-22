@@ -16,10 +16,10 @@ import com.rivell.workbench.intelligence.YesNoAnswer;
 import com.rivell.workbench.intelligence.YesNoQuestion;
 
 /**
- * Deterministic semantic provider for the M6 corpus. Answers every bounded judgment
+ * Deterministic semantic provider for the corpus. Answers every bounded judgment
  * from fixture text cues so the fake behaves like the fixture expectations: concepts
  * classify from distinctive clause language, playbook positions follow source cues,
- * M6 relevance/compatibility judgments follow the labeled precedent scenarios.
+ * relevance/compatibility judgments follow the labeled precedent scenarios.
  */
 public final class CorpusScriptedProvider implements SemanticDecisionProvider {
 

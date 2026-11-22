@@ -13,7 +13,7 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.Permissions;
 
 /**
- * "Make this a position" (design 2026-10-12 §9): a person corrects a part of a playbook or clause
+ * "Make this a position": a person corrects a part of a playbook or clause
  * library that Rivell did not take as a position. The part's candidate is rebuilt from the stored
  * source through the same compiler region and interpreted like at upload; it starts PENDING and is
  * reviewed and published like any other, so the publications stay the versions. The machine's

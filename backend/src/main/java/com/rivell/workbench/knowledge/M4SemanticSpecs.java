@@ -11,7 +11,7 @@ import com.rivell.workbench.intelligence.SemanticQuestion;
 import com.rivell.workbench.intelligence.YesNoQuestion;
 
 /**
- * M4 semantic decision specs: bounded, code-owned, versioned. Each spec defines one
+ * Semantic decision specs: bounded, code-owned, versioned. Each spec defines one
  * bounded judgment over minimal state; changed wording or criteria require a version
  * bump. Thresholds live in SemanticPolicyProperties, never in the specs.
  */

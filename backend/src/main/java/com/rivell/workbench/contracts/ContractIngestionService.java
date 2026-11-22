@@ -9,6 +9,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.unit.DataSize;
 
@@ -28,10 +30,12 @@ import java.util.Optional;
  *
  * Flow: bounded upload read, storage first (immutable file), then a staging transaction that
  * records {@link ParseStatus#PARSING}, parsing outside any transaction, then a short outcome
- * transaction. A failure after storage but before staging is compensated by removing the
- * stored file.
+ * transaction. A failure before staging commits removes the stored file; a failure after it keeps
+ * the file and marks the version {@link ParseStatus#FAILED}.
  */
 public class ContractIngestionService {
+
+    private static final Logger log = LoggerFactory.getLogger(ContractIngestionService.class);
 
     public static final String DOCX_CONTENT_TYPE =
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -101,10 +105,9 @@ public class ContractIngestionService {
                 organizationId + "/contracts/" + artifactId + ".docx");
         documentStorage.store(storageKey, new ByteArrayInputStream(bytes));
 
-        UUID contractId;
-        UUID versionId;
+        StagedIngestion staged = null;
         try {
-            var staged = transactionTemplate.execute(status -> {
+            staged = transactionTemplate.execute(status -> {
                 var ids = new UUID[] {UUID.randomUUID(), UUID.randomUUID()};
                 repository.insertSourceArtifact(
                         artifactId, organizationId, safeFilename,
@@ -118,8 +121,8 @@ public class ContractIngestionService {
                         null, ParseStatus.PARSING, List.of(), now);
                 return new StagedIngestion(ids[0], ids[1]);
             });
-            contractId = staged.contractId();
-            versionId = staged.versionId();
+            var contractId = staged.contractId();
+            var versionId = staged.versionId();
 
             ParseResult parseResult;
             try (var parsedSource = new ByteArrayInputStream(bytes)) {
@@ -147,7 +150,11 @@ public class ContractIngestionService {
                     storageKey.value(),
                     parseResult.nodes().size());
         } catch (RuntimeException | IOException e) {
-            deleteQuietly(storageKey);
+            if (staged == null) {
+                deleteQuietly(storageKey);
+            } else {
+                markParseFailedQuietly(staged.versionId());
+            }
             throw e;
         }
     }
@@ -173,7 +180,19 @@ public class ContractIngestionService {
         try {
             documentStorage.delete(storageKey);
         } catch (IOException cleanupFailure) {
-            // Orphaned immutable file; reconciliation is out of M1 scope.
+            log.warn("Uploaded file {} could not be removed after a failed upload", storageKey.value(),
+                    cleanupFailure);
+        }
+    }
+
+    private void markParseFailedQuietly(UUID versionId) {
+        try {
+            transactionTemplate.executeWithoutResult(status -> repository.updateVersionParseOutcome(
+                    versionId, null, ParseStatus.FAILED,
+                    List.of("Rivell could not save what it read from this Word file. Upload it again."),
+                    null));
+        } catch (RuntimeException markFailure) {
+            log.warn("Contract version {} could not be marked as failed", versionId, markFailure);
         }
     }
 

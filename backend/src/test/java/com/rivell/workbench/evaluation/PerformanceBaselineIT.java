@@ -56,7 +56,7 @@ import com.rivell.workbench.review.ReviewPackRegistry;
 import com.rivell.workbench.review.ReviewService;
 
 /**
- * M10 deterministic performance baseline.
+ * Deterministic performance baseline.
  *
  * <p>Measures the real product flow on real PostgreSQL with deterministic scripted providers and
  * records wall time plus JDBC statement counts per stage. Network-free, so it runs in CI and its
@@ -65,7 +65,7 @@ import com.rivell.workbench.review.ReviewService;
  * <p>This is <em>not</em> a benchmark and proves no absolute latency claim. It exists to make query
  * shape and round-trip cost visible and to fail loudly if a query count regresses by an order of
  * magnitude, which is what an N+1 regression looks like. Live-provider latency and cost are a
- * separate, manually run, non-gating measurement — see the M10 eval provider-strategy matrix.
+ * separate, manually run, non-gating measurement — see the eval provider-strategy matrix.
  */
 @SpringBootTest
 @AutoConfigureMockMvc

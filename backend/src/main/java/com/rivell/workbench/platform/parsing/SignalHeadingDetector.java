@@ -53,9 +53,10 @@ public final class SignalHeadingDetector implements HeadingDetector {
         var decisions = new ArrayList<HeadingDecision>(paragraphs.size());
         var titleSeen = false;
         var headingSeen = false;
+        var nextNonBlank = nextNonBlank(paragraphs);
         for (int i = 0; i < paragraphs.size(); i++) {
             var paragraph = paragraphs.get(i);
-            var decision = decide(paragraph, nextNonBlank(paragraphs, i), !titleSeen && !headingSeen);
+            var decision = decide(paragraph, nextNonBlank[i], !titleSeen && !headingSeen);
             titleSeen |= decision.kind() == Kind.TITLE;
             headingSeen |= decision.kind() == Kind.HEADING;
             decisions.add(decision);
@@ -205,12 +206,15 @@ public final class SignalHeadingDetector implements HeadingDetector {
         return title.strip().replaceAll("[.:–—-]+$", "").strip();
     }
 
-    private static ParagraphFeatures nextNonBlank(List<ParagraphFeatures> paragraphs, int index) {
-        for (int j = index + 1; j < paragraphs.size(); j++) {
-            if (!paragraphs.get(j).isBlank()) {
-                return paragraphs.get(j);
+    private static ParagraphFeatures[] nextNonBlank(List<ParagraphFeatures> paragraphs) {
+        var next = new ParagraphFeatures[paragraphs.size()];
+        ParagraphFeatures following = null;
+        for (int i = paragraphs.size() - 1; i >= 0; i--) {
+            next[i] = following;
+            if (!paragraphs.get(i).isBlank()) {
+                following = paragraphs.get(i);
             }
         }
-        return null;
+        return next;
     }
 }

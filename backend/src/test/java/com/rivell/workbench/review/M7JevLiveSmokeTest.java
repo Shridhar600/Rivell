@@ -17,7 +17,7 @@ import com.rivell.workbench.intelligence.provider.JevProvider;
 import com.rivell.workbench.intelligence.provider.JevProperties;
 
 /**
- * Opt-in live Jev smoke for the M7 review DecisionSpecs. Runs ONLY when
+ * Opt-in live Jev smoke for the review decision specs. Runs ONLY when
  * TYPESAFE_API_KEY is present; normal verification never needs network access or
  * credentials. Synthetic fixture text only. Engineering observation, NOT calibration.
  */

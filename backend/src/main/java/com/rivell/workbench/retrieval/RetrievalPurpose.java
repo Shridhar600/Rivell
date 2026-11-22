@@ -2,9 +2,8 @@ package com.rivell.workbench.retrieval;
 
 /**
  * Versioned retrieval intent (Architecture Decision #8). A purpose tells the planner
- * which evidence lanes matter; it is never free text. M6 implements only the purpose
- * its fixtures and architecture justify; later purposes are added when consumers
- * (M7 review) require them.
+ * which evidence lanes matter; it is never free text. Only purposes with a real
+ * consumer exist; others are added when a consumer requires them.
  */
 public enum RetrievalPurpose {
 

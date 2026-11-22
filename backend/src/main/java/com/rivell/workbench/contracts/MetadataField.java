@@ -1,6 +1,6 @@
 package com.rivell.workbench.contracts;
 
-/** Bounded metadata fields for M5 (deliberately fixture-required subset). */
+/** Bounded metadata fields (deliberately the subset fixtures require). */
 public enum MetadataField {
     AGREEMENT_TITLE,
     CONTRACT_TYPE,

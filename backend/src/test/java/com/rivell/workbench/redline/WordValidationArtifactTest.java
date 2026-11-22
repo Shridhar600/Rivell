@@ -19,7 +19,7 @@ import com.rivell.workbench.platform.docx.DocxRedlineVerifier;
 import com.rivell.workbench.platform.parsing.RedlineFixturePipeline;
 
 /**
- * Writes one tracked-change DOCX per labeled M9 case to {@code target/word-validation/}
+ * Writes one tracked-change DOCX per labeled redline case to {@code target/word-validation/}
  * together with a machine-readable manifest. The Microsoft Word release gate opens these
  * artifacts on a Windows machine; the test itself only uses the real renderer and
  * verifier (no provider, no database, no network).

@@ -11,7 +11,7 @@ import com.rivell.workbench.review.RawReviewSignal;
 
 /**
  * Terminal outcome of one check execution. {@code evidenceItems} are the exact frozen
- * items cited by the outcome's signals (G-M7-1); they are persisted with the execution
+ * items cited by the outcome's signals; they are persisted with the execution
  * so Finding evidence resolves from the original run, never from latest knowledge.
  */
 public record CheckOutcome(
@@ -51,11 +51,8 @@ public record CheckOutcome(
         }
         var unresolved = citedIds.stream().filter(id -> !byId.containsKey(id)).toList();
         if (!unresolved.isEmpty()) {
-            // M10 review finding: dropping every signal turned a traceability defect into a content
-            // one. A check that produced a dozen signals and mis-cited one evidence id used to leave
-            // the reviewer with nothing at all, indistinguishable from "this clause is fine". Only the
-            // signals that actually depend on an unresolvable citation are removed; the rest survive
-            // and the check is marked degraded so the loss is visible.
+            // Only signals that depend on an unresolvable citation are dropped; the rest survive and
+            // the check is marked degraded, so a traceability defect cannot look like a clean clause.
             var unresolvable = new java.util.HashSet<>(unresolved);
             var retained = signals.stream()
                     .filter(signal -> signal.evidenceItemIds().stream()

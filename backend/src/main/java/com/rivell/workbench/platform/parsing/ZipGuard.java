@@ -11,15 +11,8 @@ import org.xml.sax.Attributes;
 import org.xml.sax.helpers.DefaultHandler;
 
 /**
- * Bounds decompression of untrusted DOCX input before docx4j loads it: docx4j reads zip
- * entries into memory without an uncompressed-size cap. Also counts true top-level body
- * children so loader-side dropping of content becomes visible.
- */
-/**
- * Uncompressed-size bound for a DOCX package, applied before docx4j materialises it.
- *
- * <p>Public because the redline renderer and verifier live in a sibling package and load packages
- * too; they must not be the one path in the system where a decompression bomb reaches the heap.
+ * Bounds decompression of untrusted DOCX input before docx4j loads it, and counts the true
+ * top-level body children so content dropped by the loader becomes visible.
  */
 public final class ZipGuard {
 
@@ -29,14 +22,7 @@ public final class ZipGuard {
     private ZipGuard() {
     }
 
-    /**
-     * Verifies the package without materialising anything.
-     *
-     * <p>M10 review finding: the main-document branch used {@code readAllBytes()} and only compared
-     * the total afterwards, so the single largest entry in a real DOCX was fully allocated in order to
-     * decide it was too large. Every other entry was already drained through a counting read; this
-     * exists because the redline path needs the bound and has no use for the main part.
-     */
+    /** Verifies the size bound by draining every entry through a counting read; nothing is kept. */
     public static void verify(byte[] docxBytes, long maxUncompressedBytes) throws IOException {
         long total = 0;
         boolean sawMainDocument = false;
@@ -119,6 +105,9 @@ public final class ZipGuard {
         var counter = new TopLevelBodyCounter();
         try {
             var factory = SAXParserFactory.newInstance();
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
             factory.setNamespaceAware(true);
             var saxParser = factory.newSAXParser();
             saxParser.parse(new ByteArrayInputStream(mainDocumentXml), counter);

@@ -4,7 +4,7 @@ import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-/** Request shapes for the M6 evidence developer surface. */
+/** Request shapes for the evidence developer surface. */
 public final class RetrievalRequests {
 
     private RetrievalRequests() {
@@ -12,7 +12,7 @@ public final class RetrievalRequests {
 
     /**
      * The reviewed clause identifies everything the planner needs; the concept,
-     * clause text and review profile are resolved from the contract's own M5
+     * clause text and review profile are resolved from the contract's own
      * semantics — the frontend never invents retrieval semantics.
      */
     public record EvidenceBuildRequest(

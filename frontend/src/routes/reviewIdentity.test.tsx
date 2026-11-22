@@ -104,13 +104,12 @@ describe('missing route identity', () => {
 /**
  * The full request-behaviour matrix.
  *
- * The first version of this file asserted two cases and described the rest in prose. The omitted
- * cases are the ones where the guard *stands down*, and a guard that is only tested in the state
- * where it blocks cannot be told apart from one that blocks unconditionally. So every case below
- * states, in its name, whether it must produce ZERO detail requests or is intentionally allowed to
- * fall back to the backend's own review/run scoping.
+ * The cases where the guard *stands down* matter as much as the ones where it blocks: a guard
+ * tested only in the state where it blocks cannot be told apart from one that blocks
+ * unconditionally. So every case below states, in its name, whether it must produce ZERO detail
+ * requests or is intentionally allowed to fall back to the backend's own review/run scoping.
  *
- * The exact behaviour, which the earlier report overclaimed, is:
+ * The behaviour is:
  *
  *   authoritative complete list + member       -> request issued for the named finding
  *   authoritative complete list + non-member   -> ZERO requests for the named id (the workspace
@@ -119,8 +118,7 @@ describe('missing route identity', () => {
  *   list unresolved                           -> ZERO requests
  *   list errored                              -> ZERO requests
  *
- * The filtered-list case no longer exists: the M10B workspace has no list filters, so every list read
- * is either complete or truncated.
+ * The workspace has no list filters, so every list read is either complete or truncated.
  *
  * "List unresolved" blocks because the list is empty, not because the guard knows it is unresolved:
  * with no data, the authoritative test passes and membership fails. Those two states are

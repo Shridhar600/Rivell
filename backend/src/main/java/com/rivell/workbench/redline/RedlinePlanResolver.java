@@ -16,7 +16,7 @@ import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Deterministic plan resolution: every approved change is resolved against the frozen
- * M1 structure (canonical heading ids and source spans) before any document mutation.
+ * parsed structure (canonical heading ids and source spans) before any document mutation.
  * No fuzzy matching, no re-resolution after mutation, no model input.
  */
 public final class RedlinePlanResolver {
@@ -227,7 +227,7 @@ public final class RedlinePlanResolver {
     }
 
     /**
-     * Defense in depth beyond M8 target-level conflicts: no paragraph may be deleted by
+     * Defense in depth beyond target-level conflicts: no paragraph may be deleted by
      * two changes. An insertion anchored after a paragraph deleted by another change is
      * allowed — its position stays deterministic (after that paragraph's slot).
      */

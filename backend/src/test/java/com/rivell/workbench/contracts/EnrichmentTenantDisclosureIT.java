@@ -45,10 +45,9 @@ import com.rivell.workbench.review.LiabilityReviewIT;
 /**
  * The WHOLE tenant-facing semantics response is inspected, not one field.
  *
- * <p>The first M10A.1 attempt tested {@code failureReason} and stopped there. That is the field the
- * fix was written against, so it is the only field the fix was checked on, and a disclosure through
+ * <p>Testing {@code failureReason} alone would check only one field, so a disclosure through
  * any other route — {@code quality}, {@code observations}, a warning, a nested structure, a new
- * field added later — was invisible to it. This test walks the entire response document: every key
+ * field added later — would be invisible. This test walks the entire response document: every key
  * and every string value, at every depth, for both a FAILED version and a provider-degraded one.
  *
  * <p>Two different oracles, because they answer two different questions:
@@ -61,7 +60,7 @@ import com.rivell.workbench.review.LiabilityReviewIT;
  *       logic under test.
  *   <li>The <b>secret denylist</b> is a short hand-written list of substrings that no legitimate
  *       semantics field may ever contain. A denylist is legitimately hand-written; a taxonomy is
- *       not, and the earlier hand-written-snapshot defect in this same workstream is why.
+ *       not, because a hand-written list cannot stay complete as the operator set grows.
  * </ul>
  *
  * <p>Degradation is driven by a fake provider, not a live one: normal CI is network-free, and a
@@ -109,12 +108,12 @@ class EnrichmentTenantDisclosureIT {
     }
 
     /**
-     * Provider attribution that is permitted while the disclosure questions in this area stay open.
+     * Provider attribution permitted in the tenant semantics response.
      *
      * <p>These two tokens are the only provider-attributed content permitted anywhere in the tenant
-     * response, and the allow-list is deliberate rather than a test that pins them: a pinning test
-     * would fail when the Director rules, and would present that ruling as a defect. Here, ruling
-     * either way changes one line, and any <i>new</i> provider-attributed token fails immediately.
+     * response. An allow-list is deliberate rather than a pinning test: a pinning test would turn a
+     * future policy change into a failure, while here a change is one line and any <i>new</i>
+     * provider-attributed token fails immediately.
      */
     private static final Set<String> PERMITTED_PROVIDER_ATTRIBUTION =
             Set.of("PROVIDER_DEGRADATION", "providerDegraded");
@@ -124,8 +123,8 @@ class EnrichmentTenantDisclosureIT {
      * is deliberately narrow: this response carries contract clause text, so a bare word like
      * "secret" or "credential" fires on real legal prose ("third-party claims alleging ... trade
      * secret") and turns the check into a false positive. Only markers that cannot occur in a
-     * contract are listed. That narrowness is a correctness property, not laziness — an earlier
-     * draft of this list failed on the MSA fixture's own indemnification clause.
+     * contract are listed. That narrowness is a correctness property: broader markers fire on the
+     * MSA fixture's own indemnification clause ("trade secret").
      */
     private static final List<String> SECRET_DENYLIST = List.of(
             "api key", "api_key", "apikey", "x-api-key", "authorization:", "bearer ",
@@ -155,12 +154,11 @@ class EnrichmentTenantDisclosureIT {
         // and that is a fact about the state rather than a gap in coverage: enrichment threw before
         // it produced an observations record, so there is no execution telemetry to report.
         //
-        // `quality` is NOT absent, and an earlier draft of this comment claimed it was. Every FAILED
-        // enrichment is recorded with a PROVIDER_DEGRADATION quality note — `persistFailed` writes it
-        // unconditionally, for every classified reason, including UNSUPPORTED_SOURCE where the
-        // document is the cause. So this fixture DOES carry provider attribution through `quality`,
-        // and the allow-list check below is applied to it for that reason. Whether that write is
-        // correct is a separate open question, escalated rather than fixed here.
+        // `quality` is NOT absent: every FAILED enrichment is recorded with a PROVIDER_DEGRADATION
+        // quality note — `persistFailed` writes it unconditionally, for every classified reason,
+        // including UNSUPPORTED_SOURCE where the document is the cause. So this fixture DOES carry
+        // provider attribution through `quality`, and the allow-list check below is applied to it
+        // for that reason. Whether that write is correct is a separate open question.
         assertThat(data.path("enrichmentStatus").asText()).isEqualTo("FAILED");
         assertThat(data.has("failureReason")).isTrue();
         assertThat(data.path("quality").isArray()).isTrue();
@@ -555,7 +553,7 @@ class EnrichmentTenantDisclosureIT {
     }
 
     /**
-     * Delegates to the M5 scripted provider, or fails every bounded judgment when the current
+     * Delegates to the scripted provider, or fails every bounded judgment when the current
      * thread has asked for degradation. A thread-local rather than a field: MockMvc and the
      * enrichment service both run on the calling thread, so the toggle cannot leak between tests.
      */

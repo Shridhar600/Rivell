@@ -1,7 +1,7 @@
-/* Knowledge compilation workspace (M10B-F6).
+/* Knowledge compilation workspace.
    A port of rivell-knowledge-compile-v1.html (.app, .top, .work, .fl, .f, .srccard, .fgrp, .bulkrow,
    .ready, .kmain, .kscroll, .kwrap, .khead, .callout, .xform, .xcard, .fr, .kdecide, .brow, .pubcard,
-   .sheet), expressed through the M10B tokens. Every selector is prefixed rv-kc- and used nowhere
+   .sheet), expressed through the tokens. Every selector is prefixed rv-kc- and used nowhere
    else. No literal colours: tints are mixed from tokens. */
 
 .rv-kc-root {
@@ -1101,7 +1101,7 @@
     transition: none !important;
   }
 }
-/* P2b: a part a person made a position, and the action that makes one. */
+/* A part a person made a position, and the action that makes one. */
 .rv-kc-kind--you {
   border-color: var(--accent);
   color: var(--accent);

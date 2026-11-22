@@ -10,8 +10,8 @@ import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
  * Human-reviewable machine proposal: the consolidated issue of one analysis run.
- * Deterministically assembled from typed signals; no human resolution state (M8),
- * no ApprovedChange (M8). Subject references use stable canonical heading-node ids,
+ * Deterministically assembled from typed signals; no human resolution state and no
+ * ApprovedChange. Subject references use stable canonical heading-node ids,
  * never per-enrichment clause rows. {@code addedBy} is the person who added a
  * {@link IssueFamily#USER_ADDED} finding, and null for every finding Rivell assembled.
  */

@@ -563,7 +563,7 @@ class OmissionLaneIT {
         assertThat(plan.stream().filter(check -> check.mechanism() == CheckMechanism.OMISSION))
                 .hasSize(1);
 
-        // P6: the plan no longer reads the frozen engine; a v1 snapshot gets the lane when it is on
+        // The plan does not read the frozen engine; a v1 snapshot gets the lane when it is on
         var snapshot = reviewRepository.findSnapshot(organizationId(), reviewId).orElseThrow();
         var semantics = enrichmentService.getSemantics(snapshot.contractId(),
                 snapshot.contractVersionNumber());

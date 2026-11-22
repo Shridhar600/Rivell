@@ -19,13 +19,13 @@ class OpenAiCompatibleErrorsTest {
     void retryAfterParsesSecondsAndHttpDates() {
         var seconds = new HttpHeaders();
         seconds.set(HttpHeaders.RETRY_AFTER, "7");
-        assertThat(OpenAiCompatibleErrors.retryAfter(seconds))
+        assertThat(RetryAfter.parse(seconds))
                 .isEqualTo(Duration.ofSeconds(7));
 
         var date = new HttpHeaders();
         date.set(HttpHeaders.RETRY_AFTER, DateTimeFormatter.RFC_1123_DATE_TIME
                 .format(ZonedDateTime.now(java.time.ZoneOffset.UTC).plusSeconds(12)));
-        var parsed = OpenAiCompatibleErrors.retryAfter(date);
+        var parsed = RetryAfter.parse(date);
         assertThat(parsed).isNotNull();
         assertThat(parsed.toSeconds()).isBetween(10L, 12L);
     }

@@ -6,7 +6,7 @@ import java.util.UUID;
 
 /**
  * The typed semantic model of one contract version: immutable source + hierarchical
- * structure (M1) + this semantic layer (AD #5). Represents only what the contract
+ * structure + this semantic layer (AD #5). Represents only what the contract
  * contains — never whether it is acceptable. Carries safe enrichment observations
  * (AD #30) for later evaluation work.
  */

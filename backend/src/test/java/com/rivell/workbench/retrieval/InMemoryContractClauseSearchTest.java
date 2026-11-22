@@ -115,9 +115,8 @@ class InMemoryContractClauseSearchTest {
     }
 
     /**
-     * Final review I1: the per-text fallback is for a rejected batch, not for a timeout. Retrying
-     * every clause one call at a time while the endpoint is not answering is what blew the review
-     * budget.
+     * The per-text fallback is for a rejected batch, not for a timeout. Retrying every clause
+     * one call at a time while the endpoint is not answering would spend the review budget.
      */
     @Test
     void aTimedOutBatchIsNotRetriedPerText() {

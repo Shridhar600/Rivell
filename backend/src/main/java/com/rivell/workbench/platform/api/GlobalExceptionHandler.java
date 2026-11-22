@@ -3,6 +3,8 @@ package com.rivell.workbench.platform.api;
 import java.io.IOException;
 import java.util.NoSuchElementException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -64,6 +66,8 @@ import com.rivell.workbench.workflow.UnauthorizedWorkflowAccessException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     private static final ErrorResponse PAYLOAD_TOO_LARGE = new ErrorResponse(
             "413", "File too large", "This file is larger than Rivell accepts. Upload a smaller file.");
 
@@ -115,10 +119,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ReviewEvidenceIntegrityException.class)
     ResponseEntity<ErrorResponse> evidenceIntegrity(ReviewEvidenceIntegrityException e) {
-        return error(HttpStatus.INTERNAL_SERVER_ERROR, "500",
-                "Finding evidence unavailable",
+        return serverError(HttpStatus.INTERNAL_SERVER_ERROR, "Finding evidence unavailable",
                 "Rivell could not load the evidence for this finding. Try again. If it keeps "
-                        + "happening, contact your administrator.");
+                        + "happening, contact your administrator.", e);
     }
 
     @ExceptionHandler(InvalidDecisionException.class)
@@ -169,8 +172,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IOException.class)
     ResponseEntity<ErrorResponse> storageUnavailable(IOException e) {
-        return error(HttpStatus.INTERNAL_SERVER_ERROR, "500", "Document storage unavailable",
-                "Rivell could not save or open the original file. Try again.");
+        return serverError(HttpStatus.INTERNAL_SERVER_ERROR, "Document storage unavailable",
+                "Rivell could not save or open the original file. Try again.", e);
     }
 
     @ExceptionHandler({UnauthorizedRedlineAccessException.class})
@@ -212,15 +215,22 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RedlineArtifactStoreException.class)
     ResponseEntity<ErrorResponse> redlineStoreUnavailable(RedlineArtifactStoreException e) {
-        return error(HttpStatus.SERVICE_UNAVAILABLE, "503", "Document storage unavailable",
+        return serverError(HttpStatus.SERVICE_UNAVAILABLE, "Document storage unavailable",
                 "Rivell could not save the redline file. Your review is unchanged. Generate the "
-                        + "redline again.");
+                        + "redline again.", e);
     }
 
     @ExceptionHandler(ConceptClassificationUnavailableException.class)
     ResponseEntity<ErrorResponse> semanticServiceUnavailable(RuntimeException e) {
+        log.warn("Topic classification unavailable: {}", e.getMessage());
         return error(HttpStatus.SERVICE_UNAVAILABLE, "503", "Service unavailable",
                 "Rivell cannot sort entries by topic right now. Try again later.");
+    }
+
+    private ResponseEntity<ErrorResponse> serverError(
+            HttpStatus status, String title, String detail, Exception e) {
+        log.error("{} {}", status.value(), title, e);
+        return error(status, String.valueOf(status.value()), title, detail);
     }
 
     private ResponseEntity<ErrorResponse> error(HttpStatus status, String code, String title, String detail) {

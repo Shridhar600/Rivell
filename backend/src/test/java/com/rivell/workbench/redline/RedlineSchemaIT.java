@@ -169,10 +169,9 @@ class RedlineSchemaIT {
     }
 
     /**
-     * M10: V16 left redline_execution.contract_id / contract_version_id unconstrained while every
-     * other M9 table carried an organisation-scoped composite key. This proves a contract reference
-     * that does not belong to the execution's own organisation is now rejected by the schema, not
-     * merely absent from the application code.
+     * The schema rejects a contract reference from another organization: contract_id and
+     * contract_version_id are part of an organisation-scoped composite key, so this is enforced
+     * by the database, not merely by application code.
      */
     @Test
     void aContractReferenceFromAnotherOrganizationIsRejectedByTheSchema() throws Exception {

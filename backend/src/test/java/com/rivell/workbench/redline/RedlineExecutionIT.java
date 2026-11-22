@@ -346,7 +346,7 @@ class RedlineExecutionIT {
     }
 
     /**
-     * M10: redline placement must be derived from the semantics frozen at finalization, not from
+     * Redline placement must be derived from the semantics frozen at finalization, not from
      * whatever the contract semantics say at execution time. A human concept correction after
      * finalization changes the effective concepts the INSERT placement strategy reads, so a
      * placement computed from post-freeze classification is not reproducible from the approved

@@ -11,7 +11,7 @@ import com.rivell.workbench.contracts.ReviewProfile;
  * Typed retrieval intent (Architecture Decision #8): the planner routes this request
  * through authority lanes; nothing here is free text. Applicability inputs come from
  * the human-declared ReviewProfile carried by the contract's enrichment, never from
- * machine-inferred metadata. Future M7 ReviewSnapshot can construct this request.
+ * machine-inferred metadata. A review snapshot can construct this request.
  */
 public record EvidenceRequest(
         UUID organizationId,

@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 
 import com.rivell.workbench.intelligence.provider.EmbeddingProperties;
 
-/** B1: one review embeds each distinct clause text once and reuses the same vectors. */
+/** One review embeds each distinct clause text once and reuses the same vectors. */
 class ClauseEmbeddingCacheTest {
 
     private static final class CountingProvider implements EmbeddingProvider {
@@ -163,7 +163,7 @@ class ClauseEmbeddingCacheTest {
     }
 
     /**
-     * Final review I1: the per-text fallback exists for a provider that rejects one bad input, not
+     * The per-text fallback exists for a provider that rejects one bad input, not
      * for an endpoint that is timing out. A timeout must stop after the batch call and fail the lane
      * for the run, so a slow embedding endpoint cannot spend the review budget one call per clause.
      */

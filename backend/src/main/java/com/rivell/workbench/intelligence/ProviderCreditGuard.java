@@ -38,7 +38,9 @@ public final class ProviderCreditGuard {
         }
     }
 
-    public void record(String providerKey) {
-        blockedUntil.put(providerKey, clock.instant().plus(window));
+    public void recordIfOutOfCredit(String providerKey, RuntimeException failure) {
+        if (failure instanceof ProviderOutOfCreditException) {
+            blockedUntil.put(providerKey, clock.instant().plus(window));
+        }
     }
 }

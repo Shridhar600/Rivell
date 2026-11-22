@@ -1,4 +1,4 @@
-/* Modal dialog and side sheet (M10B-F6). Ported from the canonical dialog, .dlg, .dlg2 and .sheet
+/* Modal dialog and side sheet. Ported from the canonical dialog, .dlg, .dlg2 and .sheet
    rules in rivell-knowledge-v1.html and rivell-knowledge-compile-v1.html. Tokens only. Used by the
    Add knowledge and Publish dialogs and the source sheet; nothing else depends on it. */
 

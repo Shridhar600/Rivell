@@ -11,7 +11,7 @@ import com.rivell.workbench.organization.Permissions;
 /**
  * Read paths for knowledge artifacts, structure, extraction units, candidates and
  * publications. All reads are organization-scoped; cross-organization access is
- * indistinguishable from a missing object (M1 tenant pattern).
+ * indistinguishable from a missing object.
  */
 public class KnowledgeQueryService {
 
@@ -34,8 +34,8 @@ public class KnowledgeQueryService {
     }
 
     /**
-     * Artifact list for the caller. {@code limit} is optional: absent, the whole corpus is
-     * returned exactly as before this parameter existed.
+     * Artifact list for the caller. {@code limit} is optional: when absent, the whole corpus
+     * is returned.
      */
     public List<KnowledgeArtifact> listArtifacts(Integer limit) {
         requireRead();
@@ -100,8 +100,8 @@ public class KnowledgeQueryService {
     }
 
     /**
-     * Publication list for the caller. {@code limit} is optional: absent, every
-     * publication is returned exactly as before this parameter existed.
+     * Publication list for the caller. {@code limit} is optional: when absent, every
+     * publication is returned.
      */
     public List<KnowledgePublication> listPublications(Integer limit) {
         requireRead();
@@ -190,7 +190,6 @@ public class KnowledgeQueryService {
         return repository.maxPublicationNumber(organizationId);
     }
 
-    /** Whether a publication with the given number exists in the caller's organization. */
     /** System-level existence check for background flows (explicit organization). */
     public boolean publicationNumberExistsForOrganization(
             UUID organizationId, long publicationNumber) {

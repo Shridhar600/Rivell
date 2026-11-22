@@ -280,7 +280,7 @@ write('m9-macro.docx', (
     + p('This Agreement is governed by the laws of Delaware.')
 ), main_content_type=MACRO_MAIN)
 
-# P — M9 multi-change source: liability deviation + survival gap + missing
+# P — multi-change source: liability deviation + survival gap + missing
 # indemnification in one review (REPLACE + DELETE + INSERT).
 write('m9-multi-change-source.docx', (
     p('Master Services Agreement', 'Title')

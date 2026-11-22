@@ -3,7 +3,7 @@ package com.rivell.workbench.redline;
 import java.util.Objects;
 
 /**
- * A paragraph anchor resolved from the frozen M1 structure: the element at
+ * A paragraph anchor resolved from the frozen document structure: the element at
  * {@code bodyIndex} must be the paragraph with document-order ordinal
  * {@code paragraphIndex} and text exactly equal to {@code expectedText}.
  */

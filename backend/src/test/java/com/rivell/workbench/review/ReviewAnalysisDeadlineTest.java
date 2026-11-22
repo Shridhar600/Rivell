@@ -8,7 +8,7 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 /**
- * R4/R2: the budget belongs to the attempt, not to the run's age, so a resumed run is not degraded
+ * The budget belongs to the attempt, not to the run's age, so a resumed run is not degraded
  * wholesale. The run still has a hard total so an endlessly retried run cannot spend forever.
  */
 class ReviewAnalysisDeadlineTest {

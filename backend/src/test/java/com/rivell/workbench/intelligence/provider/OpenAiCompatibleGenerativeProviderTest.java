@@ -190,7 +190,7 @@ class OpenAiCompatibleGenerativeProviderTest {
         assertThat(capProperty.path("type").asText()).isEqualTo("string");
         assertThat(capProperty.path("enum").toString())
                 .contains("PRECEDING_12_MONTH_FEES", "ANNUAL_FEES");
-        // the M5 defect regression guard: camelCase wire keys must never reappear
+        // camelCase wire keys must never reappear
         assertThat(requests.get(0))
                 .doesNotContain("responseFormat").doesNotContain("jsonSchema")
                 .doesNotContain("Bearer");

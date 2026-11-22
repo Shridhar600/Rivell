@@ -28,7 +28,7 @@ import com.rivell.workbench.contracts.ReviewProfile;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
 /**
- * B22 failure/degradation matrix for rows not proven by the dedicated ITs: missing
+ * Failure/degradation matrix for rows not proven by the dedicated ITs: missing
  * approved drafting (machine language is generated instead), malformed generative
  * output (escalation, never fabrication), cross-clause provider failure, carve-out
  * NOT_COMPARABLE, and DISPUTED verification demotion. Every case must fail closed

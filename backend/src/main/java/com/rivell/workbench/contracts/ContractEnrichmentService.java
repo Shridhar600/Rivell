@@ -17,7 +17,7 @@ import com.rivell.workbench.taxonomy.ConceptKey;
 import com.rivell.workbench.taxonomy.ConceptRegistry;
 
 /**
- * M5 enrichment lifecycle: org-scoped trigger, atomic ENRICHING claim, semantic
+ * Enrichment lifecycle: org-scoped trigger, atomic ENRICHING claim, semantic
  * stages with no open transaction, outcome transaction (READY/FAILED). Code owns
  * all transitions; model calls never own control flow. Re-enrichment replaces the
  * machine layer and re-applies stored human corrections by stable keys (party

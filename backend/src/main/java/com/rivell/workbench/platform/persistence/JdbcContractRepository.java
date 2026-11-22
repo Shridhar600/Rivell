@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,10 +49,13 @@ class JdbcContractRepository implements ContractRepository {
             """.formatted(VERSION_SUMMARY_COLUMNS);
 
     private final JdbcClient jdbcClient;
+    private final NamedParameterJdbcTemplate namedTemplate;
     private final ObjectMapper objectMapper;
 
-    JdbcContractRepository(JdbcClient jdbcClient, ObjectMapper objectMapper) {
+    JdbcContractRepository(JdbcClient jdbcClient, NamedParameterJdbcTemplate namedTemplate,
+            ObjectMapper objectMapper) {
         this.jdbcClient = jdbcClient;
+        this.namedTemplate = namedTemplate;
         this.objectMapper = objectMapper;
     }
 
@@ -294,40 +299,45 @@ class JdbcContractRepository implements ContractRepository {
     @Override
     @Transactional
     public void insertNodes(UUID contractVersionId, List<DocumentNode> nodes) {
-        for (var node : nodes) {
-            var span = node.sourceSpan();
-            jdbcClient.sql("""
-                    insert into document_node
-                      (id, contract_version_id, parent_id, node_type, ordinal, text, heading_level,
-                       numbering_label, part_path, body_index, paragraph_index, table_index,
-                       row_index, cell_index, run_start, run_end, raw_style_id, run_in_heading,
-                       untrackable_content)
-                    values (:nodeId, :versionId, :parentId, :nodeType, :ordinal, :text, :headingLevel,
-                            :numberingLabel, :partPath, :bodyIndex, :paragraphIndex, :tableIndex,
-                            :rowIndex, :cellIndex, :runStart, :runEnd, :rawStyleId, :runInHeading,
-                            :untrackableContent)
-                    """)
-                    .param("nodeId", node.id())
-                    .param("versionId", contractVersionId)
-                    .param("parentId", node.parentId())
-                    .param("nodeType", node.nodeType().name())
-                    .param("ordinal", node.ordinal())
-                    .param("text", node.text())
-                    .param("headingLevel", node.headingLevel())
-                    .param("numberingLabel", node.numberingLabel())
-                    .param("partPath", span.partPath())
-                    .param("bodyIndex", span.bodyIndex())
-                    .param("paragraphIndex", span.paragraphIndex())
-                    .param("tableIndex", span.tableIndex())
-                    .param("rowIndex", span.rowIndex())
-                    .param("cellIndex", span.cellIndex())
-                    .param("runStart", span.runStart())
-                    .param("runEnd", span.runEnd())
-                    .param("rawStyleId", node.rawStyleId())
-                    .param("runInHeading", node.runInHeading())
-                    .param("untrackableContent", node.untrackableContent())
-                    .update();
+        var rows = nodes.stream()
+                .map(node -> {
+                    var span = node.sourceSpan();
+                    return new MapSqlParameterSource()
+                            .addValue("nodeId", node.id())
+                            .addValue("versionId", contractVersionId)
+                            .addValue("parentId", node.parentId())
+                            .addValue("nodeType", node.nodeType().name())
+                            .addValue("ordinal", node.ordinal())
+                            .addValue("text", node.text())
+                            .addValue("headingLevel", node.headingLevel())
+                            .addValue("numberingLabel", node.numberingLabel())
+                            .addValue("partPath", span.partPath())
+                            .addValue("bodyIndex", span.bodyIndex())
+                            .addValue("paragraphIndex", span.paragraphIndex())
+                            .addValue("tableIndex", span.tableIndex())
+                            .addValue("rowIndex", span.rowIndex())
+                            .addValue("cellIndex", span.cellIndex())
+                            .addValue("runStart", span.runStart())
+                            .addValue("runEnd", span.runEnd())
+                            .addValue("rawStyleId", node.rawStyleId())
+                            .addValue("runInHeading", node.runInHeading())
+                            .addValue("untrackableContent", node.untrackableContent());
+                })
+                .toArray(MapSqlParameterSource[]::new);
+        if (rows.length == 0) {
+            return;
         }
+        namedTemplate.batchUpdate("""
+                insert into document_node
+                  (id, contract_version_id, parent_id, node_type, ordinal, text, heading_level,
+                   numbering_label, part_path, body_index, paragraph_index, table_index,
+                   row_index, cell_index, run_start, run_end, raw_style_id, run_in_heading,
+                   untrackable_content)
+                values (:nodeId, :versionId, :parentId, :nodeType, :ordinal, :text, :headingLevel,
+                        :numberingLabel, :partPath, :bodyIndex, :paragraphIndex, :tableIndex,
+                        :rowIndex, :cellIndex, :runStart, :runEnd, :rawStyleId, :runInHeading,
+                        :untrackableContent)
+                """, rows);
     }
 
     @Override

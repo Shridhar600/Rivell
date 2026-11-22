@@ -32,7 +32,7 @@ import com.rivell.workbench.intelligence.TokenUsage;
 import com.fasterxml.jackson.databind.JsonNode;
 
 /**
- * OpenAI-compatible generative adapter (M5): serves OpenAI direct, OpenRouter, and
+ * OpenAI-compatible generative adapter: serves OpenAI direct, OpenRouter, and
  * the Vercel AI Gateway with base URL + API key + model as configuration. Builds a
  * strict-mode json_schema response format from the reasoning spec, requests
  * temperature 0, and parses the returned JSON object into the typed field map.
@@ -215,7 +215,7 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
             var failure = OpenAiCompatibleErrors.httpFailure(
                     e.getStatusCode().value(), e.getResponseBodyAsString(),
                     e.getResponseHeaders(), "generative");
-            recordOutOfCredit(failure);
+            creditGuard.recordIfOutOfCredit(creditKey(), failure);
             throw failure;
         } catch (RestClientException e) {
             throw translateTransportFailure(e);
@@ -227,12 +227,6 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
             return objectMapper.readValue(body, OpenAiCompatibleDtos.ChatResponse.class);
         } catch (Exception e) {
             throw new ProviderProtocolException("Provider response could not be parsed");
-        }
-    }
-
-    private void recordOutOfCredit(RuntimeException failure) {
-        if (failure instanceof com.rivell.workbench.intelligence.ProviderOutOfCreditException) {
-            creditGuard.record(creditKey());
         }
     }
 
@@ -255,7 +249,7 @@ public final class OpenAiCompatibleGenerativeProvider implements GenerativeReaso
         if (response.error() != null) {
             var failure = OpenAiCompatibleErrors.errorResponse(
                     response.error().code(), response.error().type(), "generative");
-            recordOutOfCredit(failure);
+            creditGuard.recordIfOutOfCredit(creditKey(), failure);
             throw failure;
         }
         if (response.model() == null || response.model().isBlank()) {

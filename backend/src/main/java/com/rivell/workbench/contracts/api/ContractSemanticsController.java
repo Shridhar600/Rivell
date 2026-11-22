@@ -40,7 +40,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Pure HTTP surface for contract semantic enrichment (M5): trigger enrichment with a
+ * Pure HTTP surface for contract semantic enrichment: trigger enrichment with a
  * review profile, inspect the typed semantic contract, and apply human corrections.
  * Composition and error mapping live in services and the global handler.
  */

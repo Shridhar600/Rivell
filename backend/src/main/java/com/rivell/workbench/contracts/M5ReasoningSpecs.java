@@ -6,7 +6,7 @@ import java.util.Set;
 import com.rivell.workbench.intelligence.ReasoningSpec;
 
 /**
- * M5 generative reasoning specs: open-ended extraction that deterministic parsing
+ * Generative reasoning specs: open-ended extraction that deterministic parsing
  * and bounded judgments cannot produce. Strict typed fields, code-validated, and
  * independently verified before use.
  */

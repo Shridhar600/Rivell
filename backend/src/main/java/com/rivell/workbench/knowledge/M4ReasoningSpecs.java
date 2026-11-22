@@ -3,7 +3,7 @@ package com.rivell.workbench.knowledge;
 import java.util.Map;
 
 /**
- * M4 generative reasoning specs: bounded open-ended extraction, versioned like
+ * Generative reasoning specs: bounded open-ended extraction, versioned like
  * decision specs. Only fields that cannot be expressed as bounded judgments or
  * deterministic extraction qualify.
  */

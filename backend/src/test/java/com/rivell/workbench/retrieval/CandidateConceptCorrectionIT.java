@@ -41,7 +41,7 @@ import com.rivell.workbench.organization.UserIdentity;
 /**
  * Foundation flow: an adversarial precedent whose machine classification
  * is absent is corrected by human review, published with the effective concept,
- * and M6 retrieval discovers it through published truth alone (no retrieval-side
+ * and retrieval discovers it through published truth alone (no retrieval-side
  * override). Machine history stays inspectable; clear/change respond correctly;
  * tenant isolation holds.
  */
@@ -215,7 +215,7 @@ class CandidateConceptCorrectionIT {
                 .isEqualTo(CoreConcepts.LIMITATION_OF_LIABILITY.value());
         assertThat(published.legalConceptKey()).isNull();
 
-        // M6 retrieval discovers it through published truth alone
+        // Retrieval discovers it through published truth alone
         var request = EvidenceRequest.forClauseReview(
                 organizationId, CoreConcepts.LIMITATION_OF_LIABILITY,
                 UUID.randomUUID(), 1, UUID.randomUUID(),

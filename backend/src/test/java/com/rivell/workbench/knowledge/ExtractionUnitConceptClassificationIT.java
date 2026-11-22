@@ -36,7 +36,7 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * The one M3 production semantic flow against real PostgreSQL with a deterministic fake
+ * The production semantic flow against real PostgreSQL with a deterministic fake
  * provider: tenant scoping, state minimality, metadata, and controlled failures.
  */
 @SpringBootTest

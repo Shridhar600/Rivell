@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
@@ -187,6 +188,8 @@ class SystemApiIT {
         var output = Path.of("target/openapi/openapi.json");
         Files.createDirectories(output.getParent());
         Files.write(output, openApiJson);
-        assertThat(output).isNotEmptyFile();
+        assertThat(new String(openApiJson, StandardCharsets.UTF_8))
+                .as("Copy target/openapi/openapi.json to frontend/openapi/ and run npm run generate:api")
+                .isEqualTo(Files.readString(Path.of("../frontend/openapi/openapi.json")));
     }
 }

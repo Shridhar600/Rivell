@@ -44,7 +44,7 @@ import com.rivell.workbench.workflow.HumanDecisionService;
 import com.rivell.workbench.workflow.ReviewFinalizationService;
 
 /**
- * M10B-B2: the reviews list must carry enough real backend truth for the canonical
+ * The reviews list must carry enough real backend truth for the canonical
  * Reviews screen to be built without inventing anything.
  *
  * <p>Every value asserted here is produced by the real services. Findings come from a
@@ -120,7 +120,7 @@ class ReviewListProjectionIT {
     }
 
     /**
-     * R1: the frozen, human-declared review context travels with the row. It comes from
+     * The frozen, human-declared review context travels with the row. It comes from
      * the snapshot the review was created against, so a later re-enrichment cannot
      * rewrite what a row claims the reviewer declared.
      */
@@ -146,7 +146,7 @@ class ReviewListProjectionIT {
     }
 
     /**
-     * R1 again, on a minimally declared review. Two of the five context columns are
+     * The same context on a minimally declared review. Two of the five context columns are
      * genuinely nullable and jurisdiction's "unset" value is a real enum constant, so a
      * row must report that honestly rather than invent a side or a paper source.
      */
@@ -171,7 +171,7 @@ class ReviewListProjectionIT {
     }
 
     /**
-     * R5: "Uploaded" is when the version this review is pinned to was ingested. It must
+     * "Uploaded" is when the version this review is pinned to was ingested. It must
      * come from that version, never from the contract's latest version and never from
      * the review's own creation time, which would silently relabel review time as
      * upload time.
@@ -201,15 +201,9 @@ class ReviewListProjectionIT {
     }
 
     /**
-     * R2: readiness is server-owned and must equal what the human-review endpoint
-     * already reports for the same review. If the list ever disagreed with
-     * {@code GET /api/reviews/{id}/human-review} the frontend would be told two
-     * different truths about the same review.
-     */
-    /**
      * A version with no HEADING nodes (a short letter agreement, or a layout the parser
-     * cannot segment) must still list. One such review used to fail the whole list with a
-     * 500, taking every other review on the page down with it.
+     * cannot segment) must still list. A single such review failing must not take every
+     * other review on the page down with it.
      */
     @Test
     void aReviewOfAContractWithNoHeadingsStillListsAlongsideOthers() throws Exception {
@@ -299,7 +293,7 @@ class ReviewListProjectionIT {
     }
 
     /**
-     * R2 for the other end of the lifecycle: a fully decided review with no escalation
+     * The other end of the lifecycle: a fully decided review with no escalation
      * is genuinely ready to finalize, and the row says so using the server's own
      * readiness flag rather than a percentage.
      */
@@ -322,7 +316,7 @@ class ReviewListProjectionIT {
     }
 
     /**
-     * R2 before analysis has produced anything: a queued review is not ready and says
+     * Before analysis has produced anything: a queued review is not ready and says
      * why, instead of reporting zeroes that read as "nothing to do".
      */
     @Test
@@ -343,7 +337,7 @@ class ReviewListProjectionIT {
     }
 
     /**
-     * R3: finalization is its own fact, separate from analysis completion. Analysis
+     * Finalization is its own fact, separate from analysis completion. Analysis
      * completing must not read as finalized, and the approved-change count must be the
      * count of the frozen set rather than the number of findings.
      */
@@ -373,7 +367,7 @@ class ReviewListProjectionIT {
     }
 
     /**
-     * R3 for a finalized review with nothing approved: the count is genuinely zero and
+     * For a finalized review with nothing approved: the count is genuinely zero and
      * that is a real outcome, not a missing value.
      */
     @Test
@@ -393,7 +387,7 @@ class ReviewListProjectionIT {
     }
 
     /**
-     * R4: only a genuinely verified redline reports a verified-change count. A failed
+     * Only a genuinely verified redline reports a verified-change count. A failed
      * execution keeps its count absent even though partial per-change verification may
      * exist internally, so a partially successful redline can never be rendered as a
      * verified one.
@@ -418,7 +412,7 @@ class ReviewListProjectionIT {
     }
 
     /**
-     * R4 when no redline was ever requested. Absence is reported as absence, not as a
+     * When no redline was ever requested, absence is reported as absence, not as a
      * zero-count success.
      */
     @Test
@@ -439,7 +433,7 @@ class ReviewListProjectionIT {
     }
 
     /**
-     * R4 where redline ran and there was nothing to redline. That is a real, completed
+     * Where redline ran and there was nothing to redline, that is a real, completed
      * execution and must stay distinguishable from both a verified artifact and from a
      * redline that was never requested.
      */
@@ -466,7 +460,7 @@ class ReviewListProjectionIT {
     }
 
     /**
-     * R1 to R5 together, on one page, so the projection is proven to be composed rather
+     * Every case together, on one page, so the projection is proven to be composed rather
      * than assembled per row from follow-up requests.
      */
     @Test
