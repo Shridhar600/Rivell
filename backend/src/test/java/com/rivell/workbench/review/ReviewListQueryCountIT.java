@@ -35,10 +35,9 @@ import com.rivell.workbench.organization.UserIdentity;
 /**
  * Proves the review list does no work proportional to its row count.
  *
- * <p>This milestone exists partly to remove the 1 + N contract requests + N summary
- * requests pattern that a naive widening of this list would produce. Counting statements
- * on the server side is the only way to prove the absence of that, because a caller cannot
- * see how many round trips the server made.
+ * <p>A naive widening of this list would produce 1 + N contract requests + N summary
+ * requests. Counting statements on the server side is the only way to prove their absence,
+ * because a caller cannot see how many round trips the server made.
  *
  * <p>Evidence comes from PostgreSQL's own statement log rather than from the shape of a
  * repository call, following the mechanism already established in

@@ -73,7 +73,7 @@ public interface ReviewAnalysisRepository {
 
     int countSignals(UUID organizationId, UUID runId, UUID planCheckId);
 
-    /** Replaces the frozen evidence items cited by one check execution (G-M7-1). */
+    /** Replaces the frozen evidence items cited by one check execution. */
     void replaceEvidenceItems(
             UUID organizationId, UUID reviewId, UUID runId, UUID planCheckId,
             List<com.rivell.workbench.retrieval.EvidenceItem> items);

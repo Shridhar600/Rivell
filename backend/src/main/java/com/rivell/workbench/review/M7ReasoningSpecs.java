@@ -5,7 +5,7 @@ import java.util.Map;
 import com.rivell.workbench.intelligence.ReasoningSpec;
 import com.rivell.workbench.intelligence.SemanticState;
 
-/** M7 generative reasoning specs: open-ended drafting only where no approved path exists. */
+/** Generative reasoning specs: open-ended drafting only where no approved path exists. */
 public final class M7ReasoningSpecs {
 
     public static final String OPEN_ENDED_POSITION_SPEC = "m7-open-ended-position";

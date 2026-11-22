@@ -16,8 +16,7 @@ import com.rivell.workbench.retrieval.EnrichmentNotReadyException;
 import com.rivell.workbench.retrieval.KnowledgePin;
 
 /**
- * Composes the product-facing evidence bundle response from the domain bundle
- * (M6 developer surface until M7 provides the review consumer).
+ * Composes the product-facing evidence bundle response from the domain bundle.
  */
 public class EvidenceApiService {
 

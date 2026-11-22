@@ -13,7 +13,7 @@ import com.rivell.workbench.contracts.PartyRole;
 import com.rivell.workbench.knowledge.ApplicableKnowledge;
 
 /**
- * Immutable review input snapshot (Pre-M7 decision 3): copied values and referenced
+ * Immutable review input snapshot: copied values and referenced
  * immutable identities, resolved exactly once at review creation. Nothing downstream
  * re-reads "latest".
  */

@@ -8,9 +8,9 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Typed payload of a knowledge candidate. M2 captures source column values verbatim
- * (table/spreadsheet cells keyed by their header labels); semantic fields arrive with M4
- * and must never be invented early (Architecture Decision #7.12).
+ * Typed payload of a knowledge candidate. Source column values are captured verbatim
+ * (table/spreadsheet cells keyed by their header labels); semantic fields are never
+ * invented here (Architecture Decision #7.12).
  *
  * <p>Two properties matter and are easy to lose:
  * <ul>

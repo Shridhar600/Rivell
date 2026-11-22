@@ -1,7 +1,7 @@
-/* Review lifecycle surface (M10B-F4).
+/* Review lifecycle surface.
    Ported from the `#/r/:id` family in the frozen rivell-reviews-v1.html: .kp, .jr, .card, .cb, .ft,
    .big, .stat3, .chk, .seg, .steps, .chg, .dif, .typ, .frozen, .rep, .rail, .ev, .tabs2, .stb.
-   Values are the canonical ones, written against the M10B tokens. Loaded after m10b.css. */
+   Values are the canonical ones, written against the tokens. Loaded after m10b.css. */
 
 /* ---------- status pill (canonical .stb) ---------- */
 .rv-stb {

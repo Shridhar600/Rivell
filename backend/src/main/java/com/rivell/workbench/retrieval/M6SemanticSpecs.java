@@ -11,7 +11,7 @@ import com.rivell.workbench.intelligence.SemanticState;
 import com.rivell.workbench.intelligence.YesNoQuestion;
 
 /**
- * M6 retrieval decision specs: bounded, code-owned, versioned judgments for the
+ * Retrieval decision specs: bounded, code-owned, versioned judgments for the
  * precedent lane only. One relevance judgment per precedent candidate (batched
  * questions over minimal state) and one policy-compatibility judgment when exactly
  * one applicable policy exists. Never a whole-corpus call; never a legal decision.

@@ -1,7 +1,7 @@
-/* Rivell design tokens v4 — M10B production token layer.
+/* Rivell design tokens v4 — production token layer.
    Values are copied unchanged from the frozen Product Design package
    (product-design/m10b/frozen-reference/design/rivell-tokens.css).
-   Token names are used verbatim by the M10B primitives in this app.
+   Token names are used verbatim by the primitives in this app.
 */
 :root{
   /* Neutrals: sage-tinted paper */

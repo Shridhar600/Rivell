@@ -32,7 +32,7 @@ import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
 /**
- * P3 is bounded: at most {@code max-checks} condition checks run per analysis run; a final WITHIN_FALLBACK
+ * The fallback-condition check is bounded: at most {@code max-checks} condition checks run per analysis run; a final WITHIN_FALLBACK
  * beyond the budget stays as it was and says so.
  */
 @SpringBootTest

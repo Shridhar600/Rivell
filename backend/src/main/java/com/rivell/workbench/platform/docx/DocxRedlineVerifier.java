@@ -77,9 +77,8 @@ public class DocxRedlineVerifier implements RedlineVerifier {
             com.rivell.workbench.platform.parsing.ZipGuard.verify(bytes,
                     properties.maxUncompressedBytes());
         } catch (com.rivell.workbench.platform.parsing.ZipGuard.ZipGuardException e) {
-            // M10 review finding: this used to be caught by the broad handler below and reported as
-            // ROUND_TRIP_FAILED, so a size rejection looked like a verification mismatch. It is a
-            // distinct, deliberate outcome and says so.
+            // A size rejection is a distinct outcome, not the verification mismatch the handlers
+            // below report.
             throw new PackageExpansionRejectedException();
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Package could not be scanned", e);
@@ -595,7 +594,7 @@ public class DocxRedlineVerifier implements RedlineVerifier {
         return null;
     }
 
-    /** M9 never mutates tables: any revision inside a table is unplanned. */
+    /** Tables are never mutated: any revision inside a table is unplanned. */
     private String tableRevisionProblem(Tbl table) {
         var problem = new String[] {null};
         for (var rawRow : table.getContent()) {

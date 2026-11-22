@@ -61,7 +61,7 @@ public record ReviewSummaryView(
     }
 
     /**
-     * Frozen review inputs (Pre-M7 decision 3); never reconstructed from live state.
+     * Frozen review inputs; never reconstructed from live state.
      * {@code engine}: the review engine the review is frozen on (V1 Jev only; V2 Jev with a second
      * opinion when unsure).
      */

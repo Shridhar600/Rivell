@@ -9,7 +9,7 @@ import com.rivell.workbench.intelligence.DecisionSpec;
 import com.rivell.workbench.intelligence.QuestionPack;
 import com.rivell.workbench.intelligence.SemanticState;
 
-/** M7 review decision specs: bounded, code-owned, versioned judgments. */
+/** Review decision specs: bounded, code-owned, versioned judgments. */
 public final class M7DecisionSpecs {
 
     private M7DecisionSpecs() {

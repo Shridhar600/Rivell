@@ -20,7 +20,7 @@ import com.rivell.workbench.review.SignalType;
 
 /**
  * Deterministic survival-coverage check: the confidentiality obligation must be
- * covered by survival semantics (M5 SURVIVES relationship, the retrieval lane's
+ * covered by survival semantics (a SURVIVES relationship, the retrieval lane's
  * survival evidence, or a survival statement written in the contract). Absence
  * produces a cross-clause conflict signal; no model call.
  */

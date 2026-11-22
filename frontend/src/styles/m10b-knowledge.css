@@ -1,7 +1,7 @@
-/* Knowledge read surfaces (M10B-F5).
+/* Knowledge read surfaces.
    Ported from rivell-knowledge-v1.html (.kp, .sech, .cards3, .kcard, .klist, .krow, .tabs2, .banner,
    .pos-t, .tl, .ins2, .fdl, .prov, .wording, .two, .lin, .lc, .srcdoc, .segc).
-   Page-scoped: every selector is prefixed rv-k- and uses the M10B tokens only. The shared shell,
+   Page-scoped: every selector is prefixed rv-k- and uses the tokens only. The shared shell,
    Home and Reviews styles are not touched. */
 
 .rv-k-title:focus {
@@ -681,7 +681,7 @@ a.rv-k-lc:focus-visible {
   }
 }
 
-/* ---------- Add knowledge dialog (M10B-F6) ---------- */
+/* ---------- Add knowledge dialog ---------- */
 .rv-k-add__field {
   margin: 0;
   padding: 0;
@@ -862,7 +862,7 @@ a.rv-k-lc:focus-visible {
   color: var(--text);
   font-weight: 600;
 }
-/* P2b: a part Rivell did not take as a position, shown in the whole file with Rivell's reading. */
+/* A part Rivell did not take as a position, shown in the whole file with Rivell's reading. */
 .rv-k-partmark {
   display: inline-block;
   margin-left: 6px;

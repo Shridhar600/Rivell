@@ -36,7 +36,7 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * M4 intelligent compilation acceptance against the fixture laboratory with deterministic
+ * Intelligent compilation acceptance against the fixture laboratory with deterministic
  * fake intelligence. Fixtures and scripted expectations double as long-term eval assets:
  * expected artifact assessment, concepts, positions, and duplicate detection.
  */

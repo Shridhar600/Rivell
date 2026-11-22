@@ -311,7 +311,7 @@ describe('generated OpenAPI client workflow', () => {
     }
     expect(candidate.reviewCategory).toBe('HIGH')
 
-    // @ts-expect-error review category is a closed enum in the M4 contract
+    // @ts-expect-error review category is a closed enum in the contract
     const unknownCategory: NonNullable<
       components['schemas']['CandidateView']['reviewCategory']
     > = 'CRITICAL'

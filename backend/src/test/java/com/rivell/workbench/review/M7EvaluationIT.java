@@ -38,8 +38,7 @@ import com.rivell.workbench.contracts.ReviewProfile;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
 /**
- * B20 eval harness: runs the labeled corpus scenarios (spec
- * {@code 2026-09-25-m7-labeled-review-corpus.md}) through the real pipeline and
+ * The eval harness runs the labeled corpus scenarios through the real pipeline and
  * records engineering fixture metrics. This is an observation over synthetic
  * fixtures with scripted providers — NOT calibration and NOT a legal benchmark.
  * Each scenario asserts its labeled expectations (issue families, unexpected and
@@ -194,7 +193,7 @@ class M7EvaluationIT {
             assertThat(finding.subjectHeadingNodeId()).isNull();
             assertThat(finding.absenceConcept()).isNotNull();
         });
-        // P6/v2: the whole-contract read runs once and names nothing; no other generative call
+        // Engine v2: the whole-contract read runs once and names nothing; no other generative call
         assertThat(generativeProvider.spottingCalls).hasValue(1);
         assertThat(generativeProvider.calls()).isEqualTo(1);
         record("S3 required + expected absence findings", organizationId, review.id(),
@@ -215,7 +214,7 @@ class M7EvaluationIT {
         var elapsed = (System.nanoTime() - start) / 1_000_000;
 
         assertThat(scriptedProvider.policyComparisonDecisions()).isZero();
-        // P6/v2: the whole-contract read runs once and names nothing; no other generative call
+        // Engine v2: the whole-contract read runs once and names nothing; no other generative call
         assertThat(generativeProvider.spottingCalls).hasValue(1);
         assertThat(generativeProvider.calls()).isEqualTo(1);
         assertThat(findingRepository.findFindings(organizationId, run.id())).isEmpty();
@@ -273,7 +272,7 @@ class M7EvaluationIT {
         assertThat(finding.reviewClassification()).isEqualTo(FindingClassification.BLOCKING);
         assertThat(finding.claims()).anyMatch(claim -> claim.claimKind() == ClaimKind.POLICY_BASIS);
         assertThat(finding.proposedAction()).isEqualTo(ProposedAction.USE_APPROVED_FALLBACK);
-        // P6/v2: the whole-contract read runs once and names nothing; no other generative call
+        // Engine v2: the whole-contract read runs once and names nothing; no other generative call
         assertThat(generativeProvider.spottingCalls).hasValue(1);
         assertThat(generativeProvider.calls()).isEqualTo(1);
         record("S8 walk-away grounded in policy, precedent not policy",

@@ -23,6 +23,7 @@ import com.rivell.workbench.intelligence.ChoiceQuestion;
 import com.rivell.workbench.intelligence.DecisionExecutionRequest;
 import com.rivell.workbench.intelligence.NoProviderConfiguredException;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
+import com.rivell.workbench.intelligence.ProviderRateLimitedException;
 import com.rivell.workbench.intelligence.ProviderRejectedException;
 import com.rivell.workbench.intelligence.ProviderTimeoutException;
 import com.rivell.workbench.intelligence.ProviderUnavailableException;
@@ -101,7 +102,7 @@ public final class JevProvider implements SemanticDecisionProvider {
                     .retrieve()
                     .body(String.class);
         } catch (RestClientResponseException e) {
-            throw mapHttpFailure(e.getStatusCode());
+            throw mapHttpFailure(e.getStatusCode(), e.getResponseHeaders());
         } catch (RestClientException e) {
             throw translateTransportFailure(e);
         }
@@ -115,12 +116,13 @@ public final class JevProvider implements SemanticDecisionProvider {
         }
     }
 
-    private RuntimeException mapHttpFailure(HttpStatusCode status) {
+    private RuntimeException mapHttpFailure(HttpStatusCode status, HttpHeaders headers) {
         if (status.value() == 422) {
             return new ProviderRejectedException("Provider rejected the decision request (validation failure)");
         }
         if (status.value() == 429) {
-            return new ProviderUnavailableException("Provider rate limited (HTTP 429)");
+            return new ProviderRateLimitedException("Provider rate limited (HTTP 429)",
+                    RetryAfter.parse(headers), 429);
         }
         if (status.value() == 402) {
             return new ProviderRejectedException("Provider account has no credits (HTTP 402)");

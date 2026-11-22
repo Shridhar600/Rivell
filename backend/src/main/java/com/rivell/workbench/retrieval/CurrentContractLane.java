@@ -13,7 +13,7 @@ import com.rivell.workbench.contracts.SemanticsNotFoundException;
 
 /**
  * Current-contract evidence lane (AD #8): the reviewed clause region, its typed
- * facts, and the clauses semantically related to it — resolved through the M5
+ * facts, and the clauses semantically related to it — resolved through the
  * canonical semantics, never through retrieval of the current document.
  */
 public class CurrentContractLane {

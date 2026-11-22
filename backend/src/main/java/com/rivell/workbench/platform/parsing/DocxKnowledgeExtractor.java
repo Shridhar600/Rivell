@@ -18,7 +18,7 @@ import java.util.Locale;
 
 /**
  * Knowledge-side DOCX structural extraction. Delegates to the contract document parser
- * (M1, reused without duplication) and maps the resulting tree into the knowledge
+ * (reused without duplication) and maps the resulting tree into the knowledge
  * module's provenance model. Deterministic; no legal interpretation.
  */
 @Component

@@ -9,7 +9,7 @@ import com.rivell.workbench.redline.ChangeLanguageSource;
 
 /**
  * One immutable human-authority revision applied to one machine Finding. Revisions are
- * append-only; the current effective decision is the highest revision. M7 Finding state
+ * append-only; the current effective decision is the highest revision. Finding state
  * is never mutated by a decision.
  */
 public record HumanDecision(

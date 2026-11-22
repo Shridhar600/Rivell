@@ -15,7 +15,6 @@ import com.rivell.workbench.intelligence.EmbeddingProvider;
 import com.rivell.workbench.intelligence.EmbeddingRequest;
 import com.rivell.workbench.intelligence.NoProviderConfiguredException;
 import com.rivell.workbench.intelligence.ProviderCreditGuard;
-import com.rivell.workbench.intelligence.ProviderOutOfCreditException;
 import com.rivell.workbench.intelligence.ProviderProtocolException;
 import com.rivell.workbench.intelligence.ProviderRateLimitedException;
 import com.rivell.workbench.intelligence.ProviderRejectedException;
@@ -24,7 +23,7 @@ import com.rivell.workbench.intelligence.ProviderUnavailableException;
 import com.rivell.workbench.intelligence.TokenUsage;
 
 /**
- * OpenAI-compatible embedding adapter (M6): serves OpenAI direct and OpenRouter
+ * OpenAI-compatible embedding adapter: serves OpenAI direct and OpenRouter
  * with base URL + API key + model as configuration. Sends batched inputs, validates
  * response ordering (data[i].index == i) and dimensionality, and reports usage.
  * Fail-closed: malformed or partial responses never become domain vectors. A batch that
@@ -215,9 +214,7 @@ public final class OpenAiCompatibleEmbeddingProvider implements EmbeddingProvide
             var failure = OpenAiCompatibleErrors.httpFailure(
                     e.getStatusCode().value(), e.getResponseBodyAsString(),
                     e.getResponseHeaders(), "embedding");
-            if (failure instanceof ProviderOutOfCreditException) {
-                creditGuard.record(creditKey());
-            }
+            creditGuard.recordIfOutOfCredit(creditKey(), failure);
             throw failure;
         } catch (RestClientException e) {
             throw translateTransportFailure(e);

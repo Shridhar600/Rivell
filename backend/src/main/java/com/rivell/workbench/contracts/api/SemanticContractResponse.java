@@ -7,7 +7,7 @@ import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
- * Product view of the typed semantic contract (M5). Domain meaning only: detected
+ * Product view of the typed semantic contract. Domain meaning only: detected
  * metadata, parties/roles with machine-vs-effective values, defined terms, reference
  * resolution, clause classifications with typed facts, semantic relationships,
  * quality reasons, and provenance summaries. No provider internals, no prompts.

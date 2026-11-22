@@ -238,6 +238,9 @@ public class RedlineExecutionService {
         try {
             rendered = renderer.render(sourceBytes, plan);
         } catch (RedlineRenderException e) {
+            if (e.getCause() != null) {
+                log.warn("Redline render failed code={}", e.code(), e.getCause());
+            }
             return fail(changeSet, organizationId, requestedBy, attemptNumber, startedAt, e.code(),
                     e.approvedChangeId(), e.getMessage(), List.of(), sourceSha);
         }
@@ -449,10 +452,7 @@ public class RedlineExecutionService {
         var live = contractQueryService.getSemanticsForOrganization(organizationId,
                 changeSet.contractId(), changeSet.contractVersionNumber());
         if (live.isEmpty()) {
-            // M10 review finding: this failed open. With no live semantics there is nothing to compare,
-            // so the guard reported "not drifted" and placement proceeded with an empty concept map -
-            // exactly the unverified placement the check exists to prevent. Absence of the thing being
-            // verified is not evidence that it verified.
+            // No live semantics means placement cannot be verified, so it counts as drifted.
             return true;
         }
         return !SemanticsDigest.of(live.get()).equals(changeSet.semanticsDigest());

@@ -43,7 +43,7 @@ import com.rivell.workbench.review.ReviewStatus;
 import com.rivell.workbench.review.RunTrigger;
 
 /**
- * Final review C1: a committed review can lose its after-commit enqueue, so a recurring reconciler
+ * A committed review can lose its after-commit enqueue, so a recurring reconciler
  * re-enqueues reviews that stay queued. The analysis job id is derived from the review, so a second
  * pass collapses onto the existing job instead of running the review twice. It also recovers a
  * review left {@code ANALYZING} by a database outage that outlasted JobRunr's retries.

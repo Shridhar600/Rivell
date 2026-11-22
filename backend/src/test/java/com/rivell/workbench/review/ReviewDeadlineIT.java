@@ -39,7 +39,7 @@ import com.rivell.workbench.intelligence.SemanticDecisionProvider;
 import com.rivell.workbench.organization.UserIdentity;
 import com.rivell.workbench.retrieval.M6EvidenceCorpus;
 
-/** R3: a review that spends its wall-clock budget still completes, every remaining check degraded. */
+/** A review that spends its wall-clock budget still completes, every remaining check degraded. */
 @SpringBootTest
 @Testcontainers
 @Import({LiabilityReviewIT.CorpusConfiguration.class,
@@ -232,7 +232,7 @@ class ReviewDeadlineIT {
         assertThat(reviewRepository.find(organizationId, review.id()).orElseThrow().status())
                 .isEqualTo(ReviewStatus.COMPLETED);
 
-        // Final review C3: a partly unrun analysis must not be finalizable as if the whole
+        // A partly unrun analysis must not be finalizable as if the whole
         // contract had been reviewed.
         var progress = humanReviewService.state(organizationId, review.id())
                 .assessment().progress();

@@ -37,7 +37,7 @@ import com.rivell.workbench.retrieval.api.RetrievalRequests;
 import com.rivell.workbench.retrieval.api.RetrievalResponses;
 
 /**
- * The M6 developer API flow: build evidence from a reviewed clause of the enriched
+ * The evidence developer API flow: build evidence from a reviewed clause of the enriched
  * MSA, with honest degradation warnings and no provider internals in the response.
  */
 @SpringBootTest
@@ -184,7 +184,7 @@ class EvidenceApiServiceIT {
         assertThat(response.items()).isNotEmpty();
         assertThat(response.items()).anySatisfy(item ->
                 assertThat(item.authorityClass()).isEqualTo("POLICY"));
-        // G-M6-1: the item carries its own applicable scope (canonical Knowledge
+        // The item carries its own applicable scope (canonical Knowledge
         // ApplicabilityScope semantics) — the published source scope, not recomputed
         assertThat(response.items()).anySatisfy(item -> {
             assertThat(item.authorityClass()).isEqualTo("POLICY");

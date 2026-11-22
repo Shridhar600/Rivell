@@ -6,7 +6,7 @@ import java.util.Map;
 import com.rivell.workbench.intelligence.SemanticState;
 
 /**
- * Minimal state for M4 bounded semantic decisions. Payloads carry only what the
+ * Minimal state for bounded semantic decisions. Payloads carry only what the
  * judgment needs — never whole artifacts, tenant ids, or manifests.
  */
 final class M4SemanticStates {

@@ -177,6 +177,11 @@ export function createUploadFormData(file: File): FormData {
   return formData
 }
 
+/** A contract whose reading could not be saved is kept as a failed contract, so a 500 does not claim nothing changed. */
+const CONTRACT_UPLOAD_MESSAGES: Partial<Record<number, string>> = {
+  500: 'Rivell could not process this file. Try uploading it again.',
+}
+
 export async function uploadContract(file: File): Promise<IngestResponse> {
   const client = createApiClient()
   const { data, response } = await client.POST('/api/contracts', {
@@ -184,7 +189,7 @@ export async function uploadContract(file: File): Promise<IngestResponse> {
     bodySerializer: () => createUploadFormData(file),
   })
 
-  if (!data) throw new UploadApiError(response.status, {}, response.headers.get('Retry-After'))
+  if (!data) throw new UploadApiError(response.status, CONTRACT_UPLOAD_MESSAGES, response.headers.get('Retry-After'))
   return parseApiResult(data, parseIngestResponse, 'upload')
 }
 

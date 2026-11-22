@@ -524,8 +524,8 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             }
             return body;
         } catch (RuntimeException e) {
-            throw failure(RedlineFailureCode.DOCX_LOAD_FAILED, null,
-                    "Rivell could not open this contract to build the redline.");
+            throw new RedlineRenderException(RedlineFailureCode.DOCX_LOAD_FAILED, null,
+                    "Rivell could not open this contract to build the redline.", e);
         }
     }
 
@@ -548,8 +548,8 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             throw failure(RedlineFailureCode.SOURCE_EXPANSION_LIMIT_EXCEEDED, null,
                     "This contract is too large once unpacked, so Rivell cannot build a redline on it.");
         } catch (Exception e) {
-            throw failure(RedlineFailureCode.DOCX_LOAD_FAILED, null,
-                    "Rivell could not open this contract to build the redline.");
+            throw new RedlineRenderException(RedlineFailureCode.DOCX_LOAD_FAILED, null,
+                    "Rivell could not open this contract to build the redline.", e);
         }
     }
 
@@ -567,8 +567,8 @@ public class DocxRedlineRenderer implements RedlineRenderer {
             var document = DocxRedlineSupport.entryBytes(output.toByteArray(), MAIN_DOCUMENT_ENTRY);
             return DocxRedlineSupport.withEntryReplaced(sourceBytes, MAIN_DOCUMENT_ENTRY, document);
         } catch (Exception e) {
-            throw failure(RedlineFailureCode.DOCX_SERIALIZATION_FAILED, null,
-                    "Rivell could not save the redline file.");
+            throw new RedlineRenderException(RedlineFailureCode.DOCX_SERIALIZATION_FAILED, null,
+                    "Rivell could not save the redline file.", e);
         }
     }
 

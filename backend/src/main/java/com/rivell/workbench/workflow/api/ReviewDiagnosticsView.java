@@ -10,11 +10,11 @@ import io.swagger.v3.oas.annotations.media.Schema;
 /**
  * Developer diagnostics for one review run.
  *
- * <p>This is the surface the M10 milestone asks for: enough to answer "what happened, and why is it
- * not moving" without a database session. It is strictly read-only and strictly diagnostic — it
- * carries no clause text, no definitions and no model prose (defined-term names only), and no legal
- * judgement, and it never proposes an action. A finding is reported by count and by the decision
- * recorded against it, not by restating the clause.
+ * <p>Enough to answer "what happened, and why is it not moving" without a database session.
+ * It is strictly read-only and strictly diagnostic — it carries no clause text, no definitions
+ * and no model prose (defined-term names only), and no legal judgement, and it never proposes
+ * an action. A finding is reported by count and by the decision recorded against it, not by
+ * restating the clause.
  *
  * <p>{@code stalled} is the field that matters operationally. A review whose analysis was enqueued
  * but never picked up, or whose run has been RUNNING far longer than any real run takes, is the

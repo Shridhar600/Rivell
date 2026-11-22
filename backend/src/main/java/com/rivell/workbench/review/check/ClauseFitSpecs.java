@@ -9,7 +9,7 @@ import com.rivell.workbench.intelligence.SemanticState;
 import com.rivell.workbench.intelligence.YesNoQuestion;
 
 /**
- * The {@code clause-fit} decision (engine decision 2026-10-24 §1 contract C, principle 4): one
+ * The {@code clause-fit} decision: one
  * bounded yes/no per question, all of one clause's questions in one pack. The question text lives
  * here with the version, so a changed prompt is a new version. A wording is asked twice, so a
  * partial fit (meets the position but does not cure the gap, or the reverse) is visible to the

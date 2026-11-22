@@ -38,7 +38,7 @@ import com.rivell.workbench.organization.UserIdentity;
  * Live embedding verification against the locally running Ollama
  * embeddinggemma (768-dim) through the REAL adapter chain:
  * EmbeddingService → provider registry → OpenAI-compatible adapter → Ollama →
- * vectors → pgvector storage/query → labeled M6 EvidenceRequest.
+ * vectors → pgvector storage/query → labeled evidence request.
  *
  * Opt-in only (OLLAMA_EMBEDDING_LIVE=1); normal verification stays network-free.
  * Engineering observation, NOT a benchmark: tiny sample, local model, no claims
@@ -168,7 +168,7 @@ class EmbeddingOllamaLiveIT {
         assertThat(execution.vectors().get(0)).hasSize(768);
         assertThat(execution.vectors().get(1)).hasSize(768);
 
-        // 2. labeled M6 evidence request with REAL embeddings + scripted Jev judgments
+        // 2. labeled evidence request with REAL embeddings + scripted Jev judgments
         var organizationId = identityProvider.currentIdentity().organizationId();
         var corpus = corpusBuilder.buildMainCorpus(organizationId);
         var clauseId = corpus.semantics().clauses().stream()

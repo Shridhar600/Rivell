@@ -6,8 +6,8 @@ import java.util.UUID;
 import com.rivell.workbench.taxonomy.ConceptKey;
 
 /**
- * One deterministic legal-change intent frozen for M9: exact action, canonical target,
- * and exact approved language with provenance. M9 resolves concrete OpenXML spans; no
+ * One deterministic legal-change intent: exact action, canonical target, and exact
+ * approved language with provenance. The renderer resolves concrete OpenXML spans; no
  * legal reasoning happens there.
  */
 public record ApprovedChange(

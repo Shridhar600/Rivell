@@ -5,7 +5,7 @@ import java.util.Map;
 import com.rivell.workbench.intelligence.SemanticState;
 
 /**
- * Minimal states for M5 bounded semantic decisions. Payloads carry only the slice a
+ * Minimal states for bounded semantic decisions. Payloads carry only the slice a
  * judgment needs — never a whole document, tenant ids, or provider internals.
  */
 final class M5SemanticStates {

@@ -26,9 +26,9 @@ import com.rivell.workbench.organization.IdentityProvider;
 import com.rivell.workbench.organization.UserIdentity;
 
 /**
- * Degradation semantics (spec §6, acceptance flow 12): with the semantic provider
- * unavailable, the precedent lane passes fused candidates through, records
- * honest degradation, and sufficiency never silently claims full sufficiency.
+ * Degradation semantics: with the semantic provider unavailable, the precedent lane passes
+ * fused candidates through, records honest degradation, and sufficiency never silently claims
+ * full sufficiency.
  */
 @SpringBootTest
 @Testcontainers
@@ -66,7 +66,7 @@ class ProviderDegradationIT {
         @Bean
         @Primary
         com.rivell.workbench.intelligence.ModelPolicy failingDecisionModelPolicy() {
-            // M4/M5 semantic compilation stays on "fake"; ONLY the M6 retrieval specs
+            // Semantic compilation stays on "fake"; ONLY the retrieval specs
             // route to an unconfigured provider so their judgments degrade
             return asset -> {
                 if (asset instanceof com.rivell.workbench.intelligence.ReasoningSpec) {

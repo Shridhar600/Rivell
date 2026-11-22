@@ -18,7 +18,7 @@ import com.rivell.workbench.taxonomy.CoreConcepts;
 import com.rivell.workbench.taxonomy.TopicClassifier;
 
 /**
- * The M5 semantic enrichment engine. Deterministic extraction first; then bounded
+ * The semantic enrichment engine. Deterministic extraction first; then bounded
  * semantic stages (one batched execution per region/party/pair) and typed fact
  * extraction. Runs with no open transaction — the service owns lifecycle and
  * persistence. Model fan-out is budgeted: over budget is deterministic degradation

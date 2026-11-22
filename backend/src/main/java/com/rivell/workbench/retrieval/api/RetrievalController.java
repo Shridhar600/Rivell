@@ -22,8 +22,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Pure HTTP surface for authority-aware evidence construction (M6 developer
- * surface until M7 provides the review consumer).
+ * Pure HTTP surface for authority-aware evidence construction.
  */
 @RestController
 @RequestMapping("/api/retrieval")

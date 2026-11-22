@@ -5,8 +5,8 @@ import java.util.UUID;
 
 /**
  * A semantic relationship between two clause regions. Separate from literal
- * cross-references (AD #5.13); feeds cross-clause review in later milestones but
- * is itself only an observed relation, never an acceptability judgment.
+ * cross-references (AD #5.13); feeds cross-clause review but is itself only an
+ * observed relation, never an acceptability judgment.
  */
 public record SemanticRelationship(
         UUID id,

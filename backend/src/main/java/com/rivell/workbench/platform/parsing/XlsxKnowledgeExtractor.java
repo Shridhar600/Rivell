@@ -45,7 +45,6 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
     private static final String WORKBOOK_PART_PATH = "xl/workbook.xml";
 
     private final DocxParserProperties properties;
-    private final DataFormatter formatter = new DataFormatter();
     private final DocumentWorkLimiter limiter;
 
     public XlsxKnowledgeExtractor(DocxParserProperties properties) {
@@ -82,9 +81,10 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
                         null, null, null, null));
 
                 var stringCells = new ArrayList<String>();
+                var formatter = new DataFormatter();
                 for (int sheetIndex = 0; sheetIndex < workbook.getNumberOfSheets(); sheetIndex++) {
                     addSheet(artifactId, workbookId, sheetIndex, workbook.getSheetAt(sheetIndex), nodes,
-                            stringCells);
+                            stringCells, formatter);
                 }
                 var warnings = new ArrayList<String>();
                 var coverage = coverage(bytes, stringCells, warnings);
@@ -92,7 +92,7 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
                         coverage);
             }
         } catch (Exception e) {
-            log.warn("Excel file could not be parsed ({}: {})", e.getClass().getSimpleName(), e.getMessage());
+            log.warn("Excel file could not be parsed", e);
             return StructureExtraction.failed(
                     PARSER_VERSION,
                     List.of("Rivell could not read this Excel file. Check that it opens in Excel, then upload it again."));
@@ -112,7 +112,7 @@ public class XlsxKnowledgeExtractor implements KnowledgeStructureExtractor {
 
     private void addSheet(
             UUID artifactId, UUID workbookId, int sheetIndex, XSSFSheet poiSheet,
-            List<KnowledgeSourceNode> nodes, List<String> stringCells) {
+            List<KnowledgeSourceNode> nodes, List<String> stringCells, DataFormatter formatter) {
         var sheetId = UUID.randomUUID();
         var sheetName = poiSheet.getSheetName();
         var partPath = partPath(poiSheet);

@@ -24,7 +24,7 @@ import com.rivell.workbench.review.ReviewStatus;
  * Human decision writes: authorization, target validation against the active completed
  * run, typed action validation, optimistic concurrency, and idempotent replay. All writes
  * serialize on the review row so decisions can neither race each other nor commit after a
- * finalization. Revisions are append-only; no M7 machine state is touched.
+ * finalization. Revisions are append-only; no machine analysis state is touched.
  */
 public class HumanDecisionService {
 
