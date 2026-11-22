@@ -10,7 +10,12 @@ public class RedlineRenderException extends RuntimeException {
 
     public RedlineRenderException(RedlineFailureCode code, UUID approvedChangeId,
             String message) {
-        super(message);
+        this(code, approvedChangeId, message, null);
+    }
+
+    public RedlineRenderException(RedlineFailureCode code, UUID approvedChangeId,
+            String message, Throwable cause) {
+        super(message, cause);
         this.code = code;
         this.approvedChangeId = approvedChangeId;
     }
