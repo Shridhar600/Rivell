@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+import fidelity_common
 import fidelity_k
 
 SCRATCH = (pathlib.Path(__file__).resolve().parents[2] / ".superpowers" / "sdd"
@@ -419,17 +420,21 @@ class MainPlumbingTest(unittest.TestCase):
         self.assertEqual(api.posted, [])  # never publish, never approve
 
 
+CONTEXT = fidelity_common.context_root()
+
+
+@unittest.skipUnless(CONTEXT.is_dir(), "needs the private context checkout")
 class DocumentTest(unittest.TestCase):
 
     def test_the_user_test_nda_playbook_resolves_inside_the_context_repo(self):
-        context = pathlib.Path("/Users/shridhar600/Dev/Projects/Rivell-context")
+        context = CONTEXT
         found = fidelity_k.resolve_document(
             context, "company-negotiation-playbook.docx", {})
         self.assertEqual(found.name, "01_Company_Negotiation_Playbook.docx")
         self.assertTrue(found.is_file())
 
     def test_an_explicit_override_wins(self):
-        context = pathlib.Path("/Users/shridhar600/Dev/Projects/Rivell-context")
+        context = CONTEXT
         found = fidelity_k.resolve_document(context, "company-negotiation-playbook.docx",
                                             {"company-negotiation-playbook.docx":
                                              context / "eval" / "corpus" / "seed"

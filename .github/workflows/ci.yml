@@ -29,7 +29,7 @@ jobs:
           java-version: '21'
           cache: maven
       # Integration tests start PostgreSQL with Testcontainers (Docker is on the runner).
-      - run: ./mvnw -B test
+      - run: ./mvnw -B package
 
   frontend:
     runs-on: ubuntu-latest
@@ -50,3 +50,15 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: npm run generate:api && git diff --exit-code src/api/schema.d.ts
+      - run: npm run check:no-demo
+
+  scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s scripts/eval -t scripts/eval -p 'test_*.py'
+      - run: python3 -m unittest discover -s scripts/demo -t scripts/demo -p 'test_*.py'
